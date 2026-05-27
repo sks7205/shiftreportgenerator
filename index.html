@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shift Report Generator</title>
+<style>
+:root{--bg:#0d0f14;--surface:#141720;--surface2:#1c2030;--border:#2a2f42;--accent:#f59e0b;--accent2:#3b82f6;--green:#10b981;--text:#e2e8f0;--muted:#64748b;--radius:8px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:Arial,sans-serif;font-size:15px;min-height:100vh;}
+header{background:var(--surface);border-bottom:2px solid var(--accent);padding:14px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;}
+.logo{font-size:11px;font-weight:700;color:var(--accent);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);padding:4px 10px;border-radius:4px;letter-spacing:2px;}
+header h1{font-size:18px;font-weight:800;letter-spacing:1px;}
+.shift-badge{margin-left:auto;font-size:13px;font-weight:700;color:var(--accent);background:rgba(245,158,11,.15);border:1px solid var(--accent);padding:5px 14px;border-radius:4px;}
+.app{max-width:900px;margin:0 auto;padding:20px 14px;}
+.progress-bar{height:3px;background:var(--border);border-radius:2px;margin-bottom:22px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:2px;transition:width .4s;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:18px;}
+.card-title{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:14px;}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;letter-spacing:.4px;text-transform:uppercase;}
+input[type=text],input[type=number],textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:monospace;font-size:13px;padding:9px 12px;outline:none;transition:border-color .2s;margin-bottom:12px;}
+input:focus,textarea:focus{border-color:var(--accent);}
+textarea{resize:vertical;min-height:80px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:var(--radius);border:none;font-size:14px;font-weight:700;cursor:pointer;transition:all .18s;}
+.btn-primary{background:var(--accent);color:#000;}
+.btn-primary:hover{background:#fbbf24;}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+.btn-success{background:var(--green);color:#000;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+.section-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:18px;}
+.section-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;cursor:pointer;text-align:left;width:100%;}
+.section-btn:hover{border-color:var(--accent2);}
+.section-btn.filled{border-color:var(--green);}
+.sec-num{font-size:10px;color:var(--muted);margin-bottom:3px;font-family:monospace;}
+.sec-name{font-size:13px;font-weight:700;color:var(--text);}
+.section-btn.filled .sec-name{color:var(--green);}
+.sec-tick{font-size:10px;color:var(--green);margin-top:3px;display:none;}
+.section-btn.filled .sec-tick{display:block;}
+.report-box{background:#0a0c10;border:1px solid var(--border);border-radius:var(--radius);padding:18px;font-family:monospace;font-size:13px;white-space:pre-wrap;color:#a3e635;line-height:1.7;max-height:60vh;overflow-y:auto;}
+.info-box{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--accent2);margin-bottom:14px;font-family:monospace;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;padding:14px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:800;color:var(--accent);margin-bottom:18px;letter-spacing:1px;text-transform:uppercase;}
+.tab-row{display:flex;gap:5px;margin-bottom:14px;}
+.tab{padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;}
+.tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.hidden{display:none!important;}
+#phase-prev-report,#phase-section-select,#phase-report-out{display:none;}
+#phase-prev-report.active,#phase-section-select.active,#phase-report-out.active{display:block;}
+.copy-wrap{position:relative;display:inline-flex;}
+.copy-flash{position:absolute;top:-30px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .3s;}
+.copy-flash.show{opacity:1;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">ARS-2</div>
+  <h1>SHIFT REPORT GENERATOR</h1>
+  <div class="shift-badge" id="header-shift">-- / --</div>
+</header>
+<div class="app">
+  <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:5%"></div></div>
+
+  <div id="phase-prev-report" class="active">
+    <div class="card">
+      <div class="card-title">Step 1 - Paste Previous Shift Report</div>
+      <label>Previous Shift Report</label>
+      <textarea id="prev-report-input" rows="10" placeholder="Paste the previous shift report here..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="parse-btn">&#9654; PARSE &amp; CONTINUE</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="phase-section-select">
+    <div class="card">
+      <div class="card-title">Step 2 - Fill Sections</div>
+      <div class="info-box" id="shift-info-box">Loading...</div>
+      <div class="section-grid" id="section-grid"></div>
+      <div class="btn-row">
+        <button class="btn btn-success" id="gen-btn">&#9889; GENERATE REPORT</button>
+        <button class="btn btn-secondary" id="back-btn">&#8592; BACK</button>
+      </div>
+    </div>
+    <div class="card" id="preview-card" style="display:none;">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>&#128065; Filled Entries Preview</span>
+        <button id="preview-toggle-btn" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">HIDE</button>
+      </div>
+      <div id="preview-content" class="report-box" style="max-height:45vh;"></div>
+    </div>
+  </div>
+
+  <div id="phase-report-out">
+    <div class="card">
+      <div class="card-title">Step 3 - Generated Report</div>
+      <div class="report-box" id="report-output"></div>
+      <div class="btn-row" style="margin-top:14px;">
+        <div class="copy-wrap">
+          <button class="btn btn-primary" id="copy-btn">&#128203; COPY REPORT</button>
+          <span class="copy-flash" id="copy-flash">Copied!</span>
+        </div>
+        <button class="btn btn-secondary" id="edit-btn">&#8592; EDIT SECTIONS</button>
+        <button class="btn btn-secondary" id="reset-btn">&#8635; NEW REPORT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-body"></div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+
+var SECTIONS = [
+  'Compliance','ARS-2 Production','ARS-3 Production','Total RA Cumulative',
+  'Bath Handling','Warehouse','Breakdowns','SBH & Mill','RMT','Manpower','Vehicles','Furnace'
+];
+
+var S = {
+  prevReport:'', prevDate:null, prevShift:null, nextDate:null, nextShift:null,
+  prevTankerCum:0, prevBathCum:0, prevRoddedAnode:0,
+  prevArs3Ra:0, prevArs3Sa:0, prevArs3Ba:0,
+  furnaceContent:'', vehicleContent:'',
+  data:{}, inputs:{}, ars3RaFtd:0, roddedAnodesCum:0
+};
+
+// ===== UTILS =====
+function el(id) { return document.getElementById(id); }
+function val(id) { var e = el(id); return e ? e.value.trim() : ''; }
+function ival(id) { var v = parseInt(val(id)); return isNaN(v) ? 0 : v; }
+
+function xStr(re, txt) {
+  var m = txt.match(re);
+  return m ? m[1].trim() : null;
+}
+function xInt(re, txt) {
+  var m = txt.match(re);
+  if (!m) return 0;
+  var v = parseInt(m[1]);
+  return isNaN(v) ? 0 : v;
+}
+
+function nextShiftCalc(prevDate, prevShift) {
+  var shifts = ['A','B','C'];
+  var ni = (shifts.indexOf(prevShift) + 1) % 3;
+  var ns = shifts[ni];
+  var p = prevDate.split('/').map(Number);
+  var dt = new Date(p[2], p[1]-1, p[0]);
+  if (ns === 'A') dt.setDate(dt.getDate() + 1);
+  var dd = String(dt.getDate()).padStart(2,'0');
+  var mm = String(dt.getMonth()+1).padStart(2,'0');
+  return { nextDate: dd+'/'+mm+'/'+dt.getFullYear(), nextShift: ns };
+}
+
+function to12hr(hhmm) {
+  var p = hhmm.split(':').map(Number);
+  var ap = p[0] >= 12 ? 'PM' : 'AM';
+  var h12 = p[0] % 12 || 12;
+  return h12 + ':' + String(p[1]).padStart(2,'0') + ap;
+}
+
+// ===== CHANGE 2: Input retention helper =====
+function restoreInputs(section, ids) {
+  var saved = S.inputs[section];
+  if (!saved) return;
+  ids.forEach(function(id) {
+    if (saved[id] !== undefined && saved[id] !== '') {
+      var e = el(id);
+      if (e) e.value = saved[id];
+    }
+  });
+}
+
+// ===== PHASES =====
+function goPhase(n) {
+  ['phase-prev-report','phase-section-select','phase-report-out'].forEach(function(id,i){
+    el(id).classList.toggle('active', i === n-1);
+  });
+  el('prog-fill').style.width = (n===1?5:n===2?50:100)+'%';
+}
+
+// ===== PARSE BUTTON =====
+el('parse-btn').addEventListener('click', function() {
+  var txt = el('prev-report-input').value.trim();
+  if (!txt) { alert('Please paste the previous shift report.'); return; }
+
+  var prevDate    = xStr(/[*]?Date:-\s*([\d\/]{8,10})/i, txt);
+  var prevShiftRaw = xStr(/[*]?Shift:-\s*([ABC])/i, txt);
+
+  if (!prevDate || !prevShiftRaw) {
+    alert('Could not find Date or Shift in the report.\nMake sure it contains lines like:\n*Date:-DD/MM/YYYY*\n*Shift:-A*');
+    return;
+  }
+
+  S.prevDate  = prevDate;
+  S.prevShift = prevShiftRaw.toUpperCase();
+
+  var ns = nextShiftCalc(S.prevDate, S.prevShift);
+  S.nextDate  = ns.nextDate;
+  S.nextShift = ns.nextShift;
+
+  S.prevTankerCum   = xInt(/Tankers\s*\(cumulative\)\s*-\s*(\d+)/i, txt);
+  S.prevBathCum     = xInt(/Cumulative\s*bath\s*-\s*(\d+)/i, txt);
+  S.prevRoddedAnode = xInt(/Rodded\s*anodes\s*\(Cumulative\)\s*-\s*(\d+)/i, txt);
+
+  var m;
+  m = txt.match(/RA\s*production[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+  S.prevArs3Ra = m ? parseInt(m[1]) : 0;
+  m = txt.match(/SA\s*processed[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+  S.prevArs3Sa = m ? parseInt(m[1]) : 0;
+  m = txt.match(/BA\s*received[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+  S.prevArs3Ba = m ? parseInt(m[1]) : 0;
+
+  m = txt.match(/[*]?FURNACE[*]?\s*([\s\S]*?)(?=[*]?Regards[*]?)/i);
+  S.furnaceContent = m ? m[1].trim() : '';
+  m = txt.match(/[*]?VEHICLES[*]?\s*([\s\S]*?)\s*(?=[*]?FURNACE[*]?)/i);
+  var vc = m ? m[1].trim() : '';
+  if (vc) vc = vc.replace(/\./g,'\n').replace(/\u2022/g,'\n\u2022');
+  S.vehicleContent = vc;
+
+  S.data = {};
+  S.inputs = {};
+  SECTIONS.forEach(function(sec){ S.data[sec] = null; });
+  S.ars3RaFtd = 0;
+  S.roddedAnodesCum = 0;
+
+  el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
+  el('shift-info-box').textContent =
+    'Generating for: Date ' + S.nextDate + '  |  Shift ' + S.nextShift +
+    '  |  Prev Tanker Cum: ' + S.prevTankerCum +
+    '  |  Prev Bath Cum: ' + S.prevBathCum;
+
+  renderGrid();
+  goPhase(2);
+});
+
+el('back-btn').addEventListener('click', function(){ goPhase(1); });
+el('gen-btn').addEventListener('click', generateReport);
+el('edit-btn').addEventListener('click', function(){ goPhase(2); renderPreview(); });
+el('reset-btn').addEventListener('click', function(){
+  el('prev-report-input').value = '';
+  el('header-shift').textContent = '-- / --';
+  goPhase(1);
+});
+el('copy-btn').addEventListener('click', function(){
+  var txt = el('report-output').textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(showCopyFlash).catch(function(){ fallbackCopy(txt); });
+  } else { fallbackCopy(txt); }
+});
+function fallbackCopy(txt) {
+  var ta = document.createElement('textarea');
+  ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); showCopyFlash(); } catch(e) { alert('Please select and copy the text manually.'); }
+  document.body.removeChild(ta);
+}
+function showCopyFlash() {
+  el('copy-flash').classList.add('show');
+  setTimeout(function(){ el('copy-flash').classList.remove('show'); }, 1800);
+}
+el('modal-overlay').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+el('preview-toggle-btn').addEventListener('click', function(){
+  var pc = el('preview-content');
+  var hidden = pc.style.display === 'none';
+  pc.style.display = hidden ? 'block' : 'none';
+  this.textContent = hidden ? 'HIDE' : 'SHOW';
+});
+
+// ===== GRID =====
+function renderGrid() {
+  var grid = el('section-grid');
+  grid.innerHTML = '';
+  SECTIONS.forEach(function(sec, i) {
+    var btn = document.createElement('button');
+    btn.className = 'section-btn' + (S.data[sec] !== null ? ' filled' : '');
+    btn.innerHTML =
+      '<div class="sec-num">#' + String(i+1).padStart(2,'0') + '</div>' +
+      '<div class="sec-name">' + sec + '</div>' +
+      '<div class="sec-tick">&#10004; filled</div>';
+    btn.addEventListener('click', (function(s){ return function(){ openModal(s); }; })(sec));
+    grid.appendChild(btn);
+  });
+}
+
+// ===== PREVIEW =====
+function renderPreview() {
+  var filled = SECTIONS.filter(function(s){ return S.data[s] !== null; });
+  var card = el('preview-card');
+  if (filled.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  var text = '*Date:-' + S.nextDate + '*\n*Shift:-' + S.nextShift + '*\n\n';
+  filled.forEach(function(sec){
+    text += '*' + sec.toUpperCase() + '*\n' + S.data[sec] + '\n\n';
+  });
+  el('preview-content').textContent = text;
+}
+
+// ===== MODAL =====
+var SECTION_FIELDS = {
+  'Compliance':        ['nm','uauc','permits','m2notif'],
+  'ARS-2 Production':  ['lul','ab','bp','rr','ra'],
+  'ARS-3 Production':  ['ars3ra','ars3sa','ars3ba'],
+  'Bath Handling':     ['bathprod','tanker','bathstock'],
+  'Warehouse':         ['whstock','whsent','whrcv'],
+  'Manpower':          ['vl','ske'],
+  'Vehicles':          ['forklift','atv'],
+  'Furnace':           ['furnacein']
+};
+
+function openModal(section) {
+  var body = el('modal-body');
+  body.innerHTML = '';
+  var t = document.createElement('div');
+  t.className = 'modal-title'; t.textContent = section;
+  body.appendChild(t);
+  body.appendChild(buildForm(section));
+  // Restore AFTER form is in DOM
+  if (SECTION_FIELDS[section]) restoreInputs(section, SECTION_FIELDS[section]);
+  el('modal-overlay').classList.add('open');
+}
+function closeModal() { el('modal-overlay').classList.remove('open'); }
+
+// ===== CHANGE 3: saveSection now accepts rawInputs =====
+function saveSection(section, value, rawInputs) {
+  S.data[section] = value;
+  if (rawInputs) S.inputs[section] = rawInputs;
+  closeModal();
+  renderGrid();
+  renderPreview();
+}
+
+// ===== FORM HELPERS =====
+function fld(id, lbl, type, ph) {
+  return '<label>' + lbl + '</label><input type="' + (type||'text') + '" id="' + id + '" placeholder="' + (ph||'') + '">';
+}
+function tarea(id, lbl, ph) {
+  return '<label>' + lbl + '</label><textarea id="' + id + '" placeholder="' + (ph||'') + '"></textarea>';
+}
+function tabs(group, labels) {
+  var h = '<div class="tab-row">';
+  labels.forEach(function(l,i){
+    h += '<button class="tab' + (i===0?' active':'') + '" data-tg="' + group + '" data-ti="' + i + '">' + l + '</button>';
+  });
+  return h + '</div>';
+}
+function saveCancelRow(fn) {
+  var row = document.createElement('div');
+  row.className = 'btn-row'; row.style.marginTop = '8px';
+  var sb = document.createElement('button');
+  sb.className = 'btn btn-primary'; sb.textContent = 'SAVE';
+  sb.addEventListener('click', fn);
+  var cb = document.createElement('button');
+  cb.className = 'btn btn-secondary'; cb.textContent = 'CANCEL';
+  cb.addEventListener('click', closeModal);
+  row.appendChild(sb); row.appendChild(cb);
+  return row;
+}
+function regexParse(raw, re) {
+  var p = {}, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(raw)) !== null) { p[m[1]] = m[2]; }
+  return p;
+}
+
+// Wire tab clicks via delegation on modal-body
+el('modal-body').addEventListener('click', function(e) {
+  var btn = e.target.closest ? e.target.closest('[data-tg]') : null;
+  if (!btn) return;
+  var group = btn.getAttribute('data-tg');
+  var idx = parseInt(btn.getAttribute('data-ti'));
+  document.querySelectorAll('[data-tg="'+group+'"]').forEach(function(t,i){
+    t.classList.toggle('active', i === idx);
+  });
+  document.querySelectorAll('[id^="'+group+'-pane-"]').forEach(function(pane){
+    var pi = parseInt(pane.id.replace(group+'-pane-',''));
+    pane.classList.toggle('hidden', pi !== idx);
+  });
+});
+
+function pane(group, idx, content, hidden) {
+  return '<div id="' + group + '-pane-' + idx + '"' + (hidden?' class="hidden"':'') + '>' + content + '</div>';
+}
+
+// ===== FORMS =====
+function buildForm(section) {
+  var wrap = document.createElement('div');
+
+  if (section === 'Compliance') {
+    wrap.innerHTML =
+      fld('nm','NM','text','0') +
+      fld('uauc','UA/UC Count','text','0/0') +
+      fld('permits','Permits (Issued/Closed)','text','0/0') +
+      fld('m2notif','M2 Notifications (Raised/Closed)','text','0/0');
+
+    wrap.appendChild(saveCancelRow(function(){
+      saveSection('Compliance',
+        '\u2022NM- '+val('nm')+' UA/UC- '+val('uauc')+' BBS:-0\n'+
+        '\u2022Permits (Issued/Closed)- '+val('permits')+'\n'+
+        '\u2022Long term isolation- 0\n'+
+        '\u2022M2 Notification (Raised/Closed)- '+val('m2notif'),
+        {nm:val('nm'),uauc:val('uauc'),permits:val('permits'),m2notif:val('m2notif')});
+    }));
+  }
+
+  else if (section === 'ARS-2 Production') {
+    wrap.innerHTML =
+      fld('lul','LUL Production (Target/Actual)','text','e.g. 800/800 OR 100p, 100p') +
+      fld('ab','AB','text','') +
+      fld('bp','BP (number)','number','') +
+      fld('rr','RR/RH/SS/RS','text','e.g. 2/1/0/0') +
+      fld('ra','Rodded Anodes (CM1,CM2 or single)','text','e.g. 120,130');
+
+    wrap.appendChild(saveCancelRow(function(){
+      var raRaw = val('ra'), roddedAnodes, cmDisplay;
+      if (raRaw.indexOf(',') !== -1) {
+        var parts = raRaw.split(',').map(function(v){ var n=parseInt(v.trim()); return isNaN(n)?0:n; });
+        roddedAnodes = parts.reduce(function(a,b){return a+b;},0);
+        cmDisplay = roddedAnodes+'('+parts.join('/')+')';
+      } else {
+        roddedAnodes = parseInt(raRaw)||0;
+        cmDisplay = String(roddedAnodes);
+      }
+      var bp = ival('bp');
+      S.roddedAnodesCum = S.nextShift==='C' ? roddedAnodes : S.prevRoddedAnode + roddedAnodes;
+
+      var lulRaw = val('lul').trim();
+      var lulDisplay = lulRaw;
+      var slashIdx = lulRaw.indexOf('/');
+      if (slashIdx !== -1) {
+        var lulTarget = lulRaw.substring(0, slashIdx).trim();
+        var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
+        var lulParts = lulActualRaw.split(',');
+        if (lulParts.length >= 2) {
+          var v1str = lulParts[0].trim();
+          var v2str = lulParts[1].trim();
+          var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
+          var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
+          var lulSum = v1 + v2;
+          lulDisplay = lulTarget + '/' + lulSum + '(' + v1 + '/' + v2 + ')';
+        }
+      }
+
+      saveSection('ARS-2 Production',
+        '\u2022 *LUL* Production (Target/Actual)- '+lulDisplay+'\n'+
+        '\u2022Rodded anodes (Cumulative)- '+S.roddedAnodesCum+'(M)\n'+
+        '\u2022Rods hooked- 0\n'+
+        '\u2022 *CM*/AB/BP- '+cmDisplay+'/'+val('ab')+'/'+bp+'\n'+
+        '\u2022RR/RH/SS/RS- '+val('rr')+'\n'+
+        '\u2022Butt/GS production- '+(bp*0.22).toFixed(0)+' mt',
+        {lul:val('lul'),ab:val('ab'),bp:val('bp'),rr:val('rr'),ra:val('ra')});
+    }));
+  }
+
+  else if (section === 'ARS-3 Production') {
+    wrap.innerHTML =
+      fld('ars3ra','RA Production (FTS)','number','') +
+      fld('ars3sa','SA Processed (FTS)','text','e.g. 200 or 50p') +
+      fld('ars3ba','BA Received sets (FTS)','number','');
+
+    wrap.appendChild(saveCancelRow(function(){
+      var fra=ival('ars3ra'), fba=ival('ars3ba');
+      var ars3saRaw = val('ars3sa').trim();
+      var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : parseInt(ars3saRaw)||0;
+      var dra=S.nextShift==='C'?fra:S.prevArs3Ra+fra;
+      var dsa=S.nextShift==='C'?fsa:S.prevArs3Sa+fsa;
+      var dba=S.nextShift==='C'?fba:S.prevArs3Ba+fba;
+      S.ars3RaFtd = dra;
+      saveSection('ARS-3 Production',
+        '*SHIFT: C+A+B*\n'+
+        'RA production(FTS/FTD): '+fra+'/'+dra+'\n'+
+        'SA processed: (FTS/FTD)- '+fsa+'/'+dsa+'\n'+
+        'BA received(sets):(FTS/FTD)- '+fba+'/'+dba,
+        {ars3ra:val('ars3ra'),ars3sa:val('ars3sa'),ars3ba:val('ars3ba')});
+    }));
+  }
+
+  else if (section === 'Total RA Cumulative') {
+    var total = (S.roddedAnodesCum||0)+(S.ars3RaFtd||0);
+    wrap.innerHTML = '<div class="info-box">ARS-2 Cumulative: <b>'+(S.roddedAnodesCum||0)+
+      '</b> + ARS-3 FTD: <b>'+(S.ars3RaFtd||0)+'</b> = <b>'+total+'</b><br>Fill ARS-2 and ARS-3 first, then come back.</div>';
+    wrap.appendChild(saveCancelRow(function(){
+      var t=(S.roddedAnodesCum||0)+(S.ars3RaFtd||0);
+      saveSection('Total RA Cumulative','(Ars-2+Ars-3)='+(S.roddedAnodesCum||0)+'+'+(S.ars3RaFtd||0)+'='+t);
+    }));
+  }
+
+  else if (section === 'Bath Handling') {
+    wrap.innerHTML =
+      tabs('bath',['Manual','Copied Text']) +
+      pane('bath',0,
+        fld('bathprod','Bath Production (mt)','number','')+
+        fld('tanker','Tankers Sent (nos)','number','')+
+        fld('bathstock','RBS1/RBS2/F1/F2/F3/F4','text','e.g. 115/157/420/457/475/450')
+      ) +
+      pane('bath',1,
+        tarea('bathcopied','Paste copied data (multiline or concatenated)',
+          'T-9\nP-361\nR1-240\n...\nor T-9P-361R1-240...'),
+        true
+      );
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('bath-pane-1').classList.contains('hidden')) {
+        var raw = val('bathcopied').replace(/\s+/g,'');
+        var p = regexParse(raw, /([A-Za-z]+\d*)-(\d+)/gi);
+        var t=parseInt(p['T']||p['t'])||0, bp2=parseInt(p['P']||p['p'])||0;
+        var tc=S.nextShift==='C'?t:S.prevTankerCum+t;
+        var bc=S.nextShift==='C'?bp2:S.prevBathCum+bp2;
+        saveSection('Bath Handling',
+          '\u2022Bath prod- '+bp2+' mt\n\u2022Cumulative bath- '+bc+' mt\n'+
+          '\u2022Tanker- '+t+' nos\n\u2022Tankers (cumulative)- '+tc+' nos\n'+
+          '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+
+          (parseInt(p['R1']||p['r1'])||0)+'/'+(parseInt(p['R2']||p['r2'])||0)+'/'+
+          (parseInt(p['F1']||p['f1'])||0)+'/'+(parseInt(p['F2']||p['f2'])||0)+'/'+
+          (parseInt(p['F3']||p['f3'])||0)+'/'+(parseInt(p['F4']||p['f4'])||0));
+      } else {
+        var bp3=ival('bathprod'), tnk=ival('tanker');
+        var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
+        var bc2=S.nextShift==='C'?bp3:S.prevBathCum+bp3;
+        saveSection('Bath Handling',
+          '\u2022Bath prod- '+bp3+' mt\n\u2022Cumulative bath- '+bc2+' mt\n'+
+          '\u2022Tanker- '+tnk+' nos\n\u2022Tankers (cumulative)- '+tc2+' nos\n'+
+          '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+val('bathstock'),
+          {bathprod:val('bathprod'),tanker:val('tanker'),bathstock:val('bathstock')});
+      }
+    }));
+  }
+
+  else if (section === 'Warehouse') {
+    wrap.innerHTML =
+      tabs('wh',['Manual','Copied Text']) +
+      pane('wh',0,
+        fld('whstock','RAP/SAP/EBB/EAP','text','e.g. 316/353/8/3')+
+        fld('whsent','Sent RA/EB','text','e.g. 612/94')+
+        fld('whrcv','Rec SA/SB','text','e.g. 692/102')
+      ) +
+      pane('wh',1,
+        tarea('whcopied','Paste copied data (multiline or concatenated)',
+          'Ra-654\nSa-600\nEb-71\n...\nor Ra-654Sa-600Eb-71...'),
+        true
+      );
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('wh-pane-1').classList.contains('hidden')) {
+        var raw = val('whcopied').replace(/\s+/g,'');
+        var p = regexParse(raw, /([A-Za-z]+)-(\d+)/gi);
+        function gp(k){ return parseInt(p[k]||p[k.toLowerCase()]||p[k.toUpperCase()])||0; }
+        saveSection('Warehouse',
+          '\u2022 RAP/SAP/EBB/EAP - '+gp('Rap')+'/'+gp('Sap')+'/'+gp('Ebb')+'/'+gp('Eap')+'\n'+
+          '\u2022 Sent RA/EB - '+gp('Ra')+'/'+gp('Eb')+'\n'+
+          '\u2022 Rec SA/SB - '+gp('Sa')+'/'+gp('Sb'));
+      } else {
+        saveSection('Warehouse',
+          '\u2022 RAP/SAP/EBB/EAP - '+val('whstock')+'\n'+
+          '\u2022 Sent RA/EB - '+val('whsent')+'\n'+
+          '\u2022 Rec SA/SB - '+val('whrcv'),
+          {whstock:val('whstock'),whsent:val('whsent'),whrcv:val('whrcv')});
+      }
+    }));
+  }
+
+  else if (section === 'Breakdowns') {
+    var alreadyFilled = S.data['Breakdowns'] !== null;
+    var appendHtml = alreadyFilled
+      ? '<div class="info-box" style="white-space:pre-wrap;max-height:90px;overflow-y:auto;margin-bottom:10px;"><b>Existing:</b>\n'+S.data['Breakdowns']+'</div>'+
+        tabs('bdmode',['Append','Overwrite'])
+      : '';
+    wrap.innerHTML =
+      appendHtml +
+      tabs('bd',['Type-1 (Manual)','Type-2 (Copied)']) +
+      pane('bd',0, tarea('bd1','Enter breakdowns (/ for new lines, or one per line)','')) +
+      pane('bd',1, tarea('bd2','Paste copied data - multiline or concatenated both work',
+        'Loop-7, Torque overload\n07:00:00\n07:15:00\n\nBC-11, choke\n12:00:00\n12:20:00'), true);
+    wrap.appendChild(saveCancelRow(function(){
+      var processed;
+      if (!el('bd-pane-1').classList.contains('hidden')) {
+        var raw = val('bd2');
+        var norm = raw.replace(/\r\n/g,'\n').replace(/\n+/g,'\n');
+        norm = norm.replace(/\n(\d{2}:\d{2}:\d{2})/g,'$1');
+        norm = norm.replace(/(\d{2}:\d{2}:\d{2})\n(\d{2}:\d{2}:\d{2})/g,'$1$2');
+        var re3 = /(.+?)(\d{2}:\d{2}):\d{2}(\d{2}:\d{2}):\d{2}/g;
+        var ev3, lines = [];
+        var now = new Date(), eightAgo = new Date(now - 8*3600*1000);
+        var dp = S.nextDate.split('/').map(Number);
+        while ((ev3 = re3.exec(norm)) !== null) {
+          var evtName = ev3[1].replace(/\n/g,' ').trim();
+          var start = ev3[2], end = ev3[3];
+          var ep = end.split(':').map(Number);
+          var endDt = new Date(dp[2],dp[1]-1,dp[0],ep[0],ep[1]);
+          if (S.nextShift==='C' && ep[0]<6) endDt.setDate(endDt.getDate()+1);
+          var notes = [];
+          if (endDt < eightAgo) notes.push('8hr deviation');
+          var ws = S.nextShift==='A'
+            ? [new Date(dp[2],dp[1]-1,dp[0],6,0), new Date(dp[2],dp[1]-1,dp[0],14,0)]
+            : S.nextShift==='B'
+            ? [new Date(dp[2],dp[1]-1,dp[0],14,0), new Date(dp[2],dp[1]-1,dp[0],22,0)]
+            : [new Date(dp[2],dp[1]-1,dp[0],22,0), new Date(dp[2],dp[1]-1,dp[0]+1,6,0)];
+          if (endDt < ws[0] || endDt > ws[1]) notes.push('Shift deviation');
+          lines.push('*'+evtName+'('+to12hr(start)+'-'+to12hr(end)+')'+(notes.length?' '+notes.join(' & '):''));
+        }
+        processed = lines.join('\n');
+      } else {
+        var t1 = val('bd1');
+        processed = t1.indexOf('/') !== -1 ? t1.replace(/\//g,'\n') : t1;
+      }
+      var modeBtn = document.querySelector('[data-tg="bdmode"].active');
+      var isAppend = alreadyFilled && modeBtn && modeBtn.getAttribute('data-ti') === '0';
+      saveSection('Breakdowns', isAppend ? S.data['Breakdowns']+'\n'+processed : processed);
+    }));
+  }
+
+  else if (section === 'SBH & Mill') {
+    var sbhExisting = S.data['SBH & Mill'] || '';
+    wrap.innerHTML = (sbhExisting ? '<div class="info-box" style="white-space:pre-wrap;max-height:80px;overflow-y:auto;margin-bottom:8px;"><b>Existing:</b>\n'+sbhExisting+'</div>' : '') +
+      (sbhExisting ? tabs('sbhmode',['Append','Overwrite']) : '') +
+      tarea('sbh_data', sbhExisting ? 'New entry' : 'SBH & Mill Data', '');
+    wrap.appendChild(saveCancelRow(function(){
+      var newVal = val('sbh_data');
+      var modeBtn = document.querySelector('[data-tg="sbhmode"].active');
+      var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
+      var combined = sbhExisting ? (isOverwrite ? (newVal || sbhExisting) : (newVal ? sbhExisting+'\n'+newVal : sbhExisting)) : newVal;
+      saveSection('SBH & Mill', combined);
+    }));
+  }
+
+  else if (section === 'RMT') {
+    var rmtExisting = S.data['RMT'] || '';
+    wrap.innerHTML = (rmtExisting ? '<div class="info-box" style="white-space:pre-wrap;max-height:80px;overflow-y:auto;margin-bottom:8px;"><b>Existing:</b>\n'+rmtExisting+'</div>' : '') +
+      (rmtExisting ? tabs('rmtmode',['Append','Overwrite']) : '') +
+      tarea('rmt_data', rmtExisting ? 'New entry' : 'RMT Data', '');
+    wrap.appendChild(saveCancelRow(function(){
+      var newVal = val('rmt_data');
+      var modeBtn = document.querySelector('[data-tg="rmtmode"].active');
+      var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
+      var combined = rmtExisting ? (isOverwrite ? (newVal || rmtExisting) : (newVal ? rmtExisting+'\n'+newVal : rmtExisting)) : newVal;
+      saveSection('RMT', combined);
+    }));
+  }
+
+  else if (section === 'Manpower') {
+    wrap.innerHTML =
+      fld('vl','VL (Planned/Actual)','text','e.g. 2/1') +
+      fld('ske','SKE (Planned/Actual)','text','e.g. 5/5');
+
+    wrap.appendChild(saveCancelRow(function(){
+      saveSection('Manpower',
+        '\u2022VL(Planned/Actual)-'+val('vl')+'\n\u2022SKE(Planned/Actual)-'+val('ske'),
+        {vl:val('vl'),ske:val('ske')});
+    }));
+  }
+
+  else if (section === 'Vehicles') {
+    wrap.innerHTML =
+      tabs('veh',['Manual','Use Previous']) +
+      pane('veh',0, fld('forklift','Forklift (3T/10T)','text','e.g. 1/1')+fld('atv','ATV count','text','e.g. 2')) +
+      pane('veh',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.vehicleContent||'No vehicle data found.')+'</div>', true);
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('veh-pane-1').classList.contains('hidden')) {
+        saveSection('Vehicles', S.vehicleContent);
+      } else {
+        saveSection('Vehicles',
+          '\u2022Forklift (3T/10T)- '+val('forklift')+'\n\u2022ATV-'+val('atv'),
+          {forklift:val('forklift'),atv:val('atv')});
+      }
+    }));
+  }
+
+  else if (section === 'Furnace') {
+    wrap.innerHTML =
+      tabs('fur',['Manual','Use Previous']) +
+      pane('fur',0, fld('furnacein','Furnace in operation info','text','')) +
+      pane('fur',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.furnaceContent||'No furnace data found.')+'</div>', true);
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('fur-pane-1').classList.contains('hidden')) {
+        saveSection('Furnace', S.furnaceContent);
+      } else {
+        saveSection('Furnace',
+          '\u2022Ladle: 04 running,  2 preheating & 2 air dry\n\u2022Furnace in per- '+val('furnacein'),
+          {furnacein:val('furnacein')});
+      }
+    }));
+  }
+
+  return wrap;
+}
+
+// ===== GENERATE =====
+function generateReport() {
+  var report = '\n*Date:-'+S.nextDate+'*\n*Shift:-'+S.nextShift+'*\n\n';
+  SECTIONS.forEach(function(sec){
+    if (S.data[sec]) report += '*'+sec.toUpperCase()+'*\n'+S.data[sec]+'\n\n';
+  });
+  report += 'Regards\nOmkar & Santanu\n';
+  el('report-output').textContent = report;
+  goPhase(3);
+}
+
+goPhase(1);
+
+}); // end DOMContentLoaded
+</script>
+</body>
+</html>
