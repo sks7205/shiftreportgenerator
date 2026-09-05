@@ -209,12 +209,22 @@ function xInt(re, txt) {
   return isNaN(v) ? 0 : v;
 }
 
-//function nextShiftCalc(prevDate, prevShift) {
+function nextShiftCalc(prevDate, prevShift) {
   var shifts = ['A','B','C'];
   var ni = (shifts.indexOf(prevShift) + 1) % 3;
   var ns = shifts[ni];
-  var p = prevDate.split('/').map(Number);
-  var dt = new Date(p[2], p[1]-1, p[0]);
+  var dt;
+  if(prevDate.includes('/')) {
+    var p = prevDate.split('/').map(Number);
+    // Assumes DD/MM/YYYY. If YYYY/MM/DD modify this logic.
+    dt = new Date(p[2] < 100 ? p[2] + 2000 : p[2], p[1]-1, p[0]);
+  } else if (prevDate.includes('-')) {
+    var p = prevDate.split('-').map(Number);
+    dt = new Date(p[2] < 100 ? p[2] + 2000 : p[2], p[1]-1, p[0]);
+  } else {
+    dt = new Date();
+  }
+  
   if (ns === 'A') dt.setDate(dt.getDate() + 1);
   var dd = String(dt.getDate()).padStart(2,'0');
   var mm = String(dt.getMonth()+1).padStart(2,'0');
@@ -251,8 +261,9 @@ el('parse-btn').addEventListener('click', function() {
   var txt = el('prev-report-input').value.trim();
   if (!txt) { alert('Please paste the previous shift report.'); return; }
 
-  var prevDate    = xStr(/[*]?Date:-\s*([\d\/]{8,10})/i, txt);
-  var prevShiftRaw = xStr(/[*]?Shift:-\s*([ABC])/i, txt);
+  // More flexible Regex for Date and Shift
+  var prevDate    = xStr(/Date\s*(?:[:-]+)?\s*([\d\/.-]+)/i, txt);
+  var prevShiftRaw = xStr(/Shift\s*(?:[:-]+)?\s*([ABC])/i, txt);
 
   if (!prevDate || !prevShiftRaw) {
     alert('Could not find Date or Shift in the report.\nMake sure it contains lines like:\n*Date:-DD/MM/YYYY*\n*Shift:-A*');
@@ -370,7 +381,7 @@ function getBase64(file) {
     });
 }
 
-//el('ai-process-btn').addEventListener('click', async function(){
+el('ai-process-btn').addEventListener('click', async function(){
     const prodInput = el('prod-img');
     const bdInput = el('bd-img');
     
@@ -395,7 +406,13 @@ function getBase64(file) {
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
-        const result = await response.json();
+        const resultText = await response.text();
+        let result;
+        try {
+            result = JSON.parse(resultText);
+        } catch(e) {
+             throw new Error("Received non-JSON response from server.");
+        }
         
         if (result.success && result.data) {
             autoFillFromAI(result.data);
@@ -410,7 +427,7 @@ function getBase64(file) {
     }
 });
 
-//function autoFillFromAI(ai) {
+function autoFillFromAI(ai) {
   // Breakdowns
   if(ai.breakdowns) {
     let existing = S.data['Breakdowns'] || '';
@@ -608,7 +625,7 @@ function pane(group, idx, content, hidden) {
   return '<div id="' + group + '-pane-' + idx + '"' + (hidden?' class="hidden"':'') + '>' + content + '</div>';
 }
 
-//function buildForm(section) {
+function buildForm(section) {
   var wrap = document.createElement('div');
 
   if (section === 'Compliance') {
