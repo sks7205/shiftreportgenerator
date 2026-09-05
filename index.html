@@ -15,6 +15,7 @@ header h1{font-size:18px;font-weight:800;letter-spacing:1px;}
 .app{max-width:900px;margin:0 auto;padding:20px 14px;}
 .progress-bar{height:3px;background:var(--border);border-radius:2px;margin-bottom:22px;overflow:hidden;}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:2px;transition:width .4s;}
+
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:18px;}
 .card-title{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:14px;}
 label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;letter-spacing:.4px;text-transform:uppercase;}
@@ -28,18 +29,21 @@ textarea{resize:vertical;min-height:80px;}
 .btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
 .btn-success{background:var(--green);color:#000;}
 .btn-danger{background:#ef4444;color:#fff;}
-.btn-ai{background:var(--accent2);color:#fff;border:1px solid var(--accent2);}
+.btn-sm{padding:4px 10px;font-size:11px;}
+.btn-ai{background:var(--accent2);color:#fff;border:1px solid var(--accent2);width:100%;justify-content:center;margin-top:10px;padding:12px;}
 .btn-ai:hover{background:#2563eb;}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+
 .section-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:18px;}
 .section-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;cursor:pointer;text-align:left;width:100%;}
 .section-btn:hover{border-color:var(--accent2);}
-.section-btn.filled{border-color:var(--green);}
+.section-btn.filled{border-color:var(--green); background: rgba(16, 185, 129, 0.05);}
 .sec-num{font-size:10px;color:var(--muted);margin-bottom:3px;font-family:monospace;}
 .sec-name{font-size:13px;font-weight:700;color:var(--text);}
 .section-btn.filled .sec-name{color:var(--green);}
 .sec-tick{font-size:10px;color:var(--green);margin-top:3px;display:none;}
 .section-btn.filled .sec-tick{display:block;}
+
 .report-box{background:#0a0c10;border:1px solid var(--border);border-radius:var(--radius);padding:18px;font-family:monospace;font-size:13px;white-space:pre-wrap;color:#a3e635;line-height:1.7;max-height:60vh;overflow-y:auto;}
 .info-box{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--accent2);margin-bottom:14px;font-family:monospace;}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;padding:14px;}
@@ -52,18 +56,23 @@ textarea{resize:vertical;min-height:80px;}
 .hidden{display:none!important;}
 #phase-prev-report,#phase-section-select,#phase-report-out{display:none;}
 #phase-prev-report.active,#phase-section-select.active,#phase-report-out.active{display:block;}
+
 .copy-wrap{position:relative;display:inline-flex;}
 .copy-flash{position:absolute;top:-30px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .3s;}
 .copy-flash.show{opacity:1;}
 
-/* AI & Upload Styles */
-.ai-zone{background:rgba(59,130,246,.05);border:1px dashed var(--accent2);border-radius:var(--radius);padding:16px;margin-bottom:18px;}
+/* Updated Upload Styles */
+.ai-zone{background:rgba(59,130,246,.05);border:1px dashed var(--accent2);border-radius:var(--radius);padding:16px;margin-bottom:18px;position:relative;overflow:hidden;}
 .ai-zone-title{font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
-.file-upload-wrap{display:flex;gap:10px;align-items:center;margin-bottom:10px;}
-.file-input-btn{background:var(--surface2);border:1px solid var(--border);padding:8px 12px;border-radius:var(--radius);font-size:13px;cursor:pointer;color:var(--text);}
-.thumbnails{display:flex;gap:8px;flex-wrap:wrap;}
-.thumb{width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);}
-.loader-overlay{display:none;position:absolute;inset:0;background:rgba(20,23,32,0.8);backdrop-filter:blur(2px);z-index:50;align-items:center;justify-content:center;border-radius:var(--radius);flex-direction:column;gap:10px;}
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+@media(max-width: 600px) { .upload-grid { grid-template-columns: 1fr; } }
+.upload-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.upload-box label { color: var(--accent); margin-bottom: 8px; font-size: 11px; }
+.upload-box input[type=file] { width: 100%; font-size: 12px; padding: 6px; margin: 0; background: var(--surface); cursor: pointer; }
+.preview-area { display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px; border-radius: 6px; border: 1px solid var(--border); margin-top: 8px; }
+.preview-area img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+
+.loader-overlay{display:none;position:absolute;inset:0;background:rgba(20,23,32,0.85);backdrop-filter:blur(3px);z-index:50;align-items:center;justify-content:center;border-radius:var(--radius);flex-direction:column;gap:10px;}
 .loader-overlay.active{display:flex;}
 .spinner{width:30px;height:30px;border:3px solid var(--surface2);border-top-color:var(--accent2);border-radius:50%;animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -90,35 +99,47 @@ textarea{resize:vertical;min-height:80px;}
   </div>
 
   <div id="phase-section-select">
-    <div class="card"> <!-- Removed position:relative from here -->
-      
+    <div class="card">
       <div class="card-title">Step 2 - Fill Sections</div>
       <div class="info-box" id="shift-info-box">Loading...</div>
       
-      <!-- Added position:relative and overflow:hidden to this ai-zone -->
-      <div class="ai-zone" style="position:relative; overflow:hidden;">
-        
-        <!-- MOVED THE LOADER HERE -->
+      <!-- AI Zone -->
+      <div class="ai-zone">
         <div class="loader-overlay" id="ai-loader">
           <div class="spinner"></div>
-          <div style="font-size:12px;font-weight:700;color:var(--accent2);">AI is reading images...</div>
+          <div style="font-size:12px;font-weight:700;color:var(--accent2);">Extracting data from images...</div>
         </div>
 
-        <div class="ai-zone-title">&#10024; AI Auto-Fill (Optional)</div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Upload SAP photos, production boards, or handwritten breakdown logs to automatically extract and route data.</p>
-        <div class="file-upload-wrap">
-          <input type="file" id="ai-images" multiple accept="image/*" style="display:none;">
-          <label for="ai-images" class="file-input-btn">&#128247; Select Images</label>
-          <button class="btn btn-ai" id="ai-process-btn" style="display:none;">&#9889; Extract Data</button>
+        <div class="ai-zone-title">&#10024; AI Auto-Extract</div>
+        
+        <div class="upload-grid">
+          <!-- Box 1: Production -->
+          <div class="upload-box">
+            <label>1. PRODUCTION SHEET</label>
+            <input type="file" id="prod-img" accept="image/*">
+            <div class="preview-area" id="prod-preview" style="display:none;">
+               <img id="prod-thumb" src="" alt="preview">
+               <button class="btn btn-danger btn-sm" id="prod-clear">X Remove</button>
+            </div>
+          </div>
+          <!-- Box 2: Breakdown -->
+          <div class="upload-box">
+            <label>2. SAP BREAKDOWN</label>
+            <input type="file" id="bd-img" accept="image/*">
+            <div class="preview-area" id="bd-preview" style="display:none;">
+               <img id="bd-thumb" src="" alt="preview">
+               <button class="btn btn-danger btn-sm" id="bd-clear">X Remove</button>
+            </div>
+          </div>
         </div>
-        <div class="thumbnails" id="ai-thumbnails"></div>
+        
+        <button class="btn btn-ai" id="ai-process-btn">&#9889; Auto-Extract & Fill Data</button>
       </div>
 
       <div class="section-grid" id="section-grid"></div>
       <div class="btn-row">
         <button class="btn btn-success" id="gen-btn">&#9889; GENERATE REPORT</button>
         <button class="btn btn-secondary" id="back-btn">&#8592; BACK</button>
-        <button class="btn btn-danger" id="reset-sheet-btn" style="margin-left:auto;">&#9888; RESET SHEET DATA</button>
       </div>
     </div>
     
@@ -154,7 +175,11 @@ textarea{resize:vertical;min-height:80px;}
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 
+//// ==============================================================================
+// ⚠️ REPLACE WITH YOUR ACTUAL GOOGLE APPS SCRIPT URL ⚠️
 const gasWebAppUrl = "https://script.google.com/macros/s/AKfycbzZCzqEqlzECGkfI8hCjucAGjdMbq9IPSWkfcDZy0ocOe1zERIEXBJv_a9WZaC8xEbbPw/exec";
+// ==============================================================================
+
 var SECTIONS = [
   'Compliance','ARS-2 Production','ARS-3 Production','Total RA Cumulative',
   'Bath Handling','Warehouse','Breakdowns','SBH & Mill','RMT','Manpower','Vehicles','Furnace'
@@ -167,8 +192,6 @@ var S = {
   furnaceContent:'', vehicleContent:'',
   data:{}, inputs:{}, ars3RaFtd:0, roddedAnodesCum:0
 };
-
-var base64Images = [];
 
 // ===== UTILS =====
 function el(id) { return document.getElementById(id); }
@@ -186,7 +209,7 @@ function xInt(re, txt) {
   return isNaN(v) ? 0 : v;
 }
 
-function nextShiftCalc(prevDate, prevShift) {
+//function nextShiftCalc(prevDate, prevShift) {
   var shifts = ['A','B','C'];
   var ni = (shifts.indexOf(prevShift) + 1) % 3;
   var ns = shifts[ni];
@@ -223,77 +246,7 @@ function goPhase(n) {
   el('prog-fill').style.width = (n===1?5:n===2?50:100)+'%';
 }
 
-// ===== TEXT GENERATORS FOR DATA PROCESSING =====
-// We extract logic here so AI auto-fill and manual modal save use the exact same code
-function computeArs2Text(inputs) {
-  var raRaw = String(inputs.ra || '0'), roddedAnodes, cmDisplay;
-  if (raRaw.indexOf(',') !== -1) {
-    var parts = raRaw.split(',').map(function(v){ var n=parseInt(v.trim()); return isNaN(n)?0:n; });
-    roddedAnodes = parts.reduce(function(a,b){return a+b;},0);
-    cmDisplay = roddedAnodes+'('+parts.join('/')+')';
-  } else {
-    roddedAnodes = parseInt(raRaw)||0;
-    cmDisplay = String(roddedAnodes);
-  }
-  var bp = parseInt(inputs.bp)||0;
-  S.roddedAnodesCum = S.nextShift==='C' ? roddedAnodes : S.prevRoddedAnode + roddedAnodes;
-
-  var lulRaw = String(inputs.lul||'').trim();
-  var lulDisplay = lulRaw;
-  var slashIdx = lulRaw.indexOf('/');
-  if (slashIdx !== -1) {
-    var lulTarget = lulRaw.substring(0, slashIdx).trim();
-    var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
-    var lulParts = lulActualRaw.split(',');
-    if (lulParts.length >= 2) {
-      var v1str = lulParts[0].trim();
-      var v2str = lulParts[1].trim();
-      var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
-      var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
-      var lulSum = v1 + v2;
-      lulDisplay = lulTarget + '/' + lulSum + '(' + v1 + '/' + v2 + ')';
-    }
-  }
-
-  return '\u2022 *LUL* Production (Target/Actual)- '+lulDisplay+'\n'+
-    '\u2022Rodded anodes (Cumulative)- '+S.roddedAnodesCum+'(M)\n'+
-    '\u2022Rods hooked- 0\n'+
-    '\u2022 *CM*/AB/BP- '+cmDisplay+'/'+(inputs.ab||'')+'/'+bp+'\n'+
-    '\u2022RR/RH/SS/RS- '+(inputs.rr||'')+'\n'+
-    '\u2022Butt/GS production- '+(bp*0.22).toFixed(0)+' mt';
-}
-
-function computeArs3Text(inputs) {
-  var fra=parseInt(inputs.ars3ra)||0, fba=parseInt(inputs.ars3ba)||0;
-  var ars3saRaw = String(inputs.ars3sa||'').trim();
-  var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : parseInt(ars3saRaw)||0;
-  var dra=S.nextShift==='C'?fra:S.prevArs3Ra+fra;
-  var dsa=S.nextShift==='C'?fsa:S.prevArs3Sa+fsa;
-  var dba=S.nextShift==='C'?fba:S.prevArs3Ba+fba;
-  S.ars3RaFtd = dra;
-  return '*SHIFT: C+A+B*\n'+
-    'RA production(FTS/FTD): '+fra+'/'+dra+'\n'+
-    'SA processed: (FTS/FTD)- '+fsa+'/'+dsa+'\n'+
-    'BA received(sets):(FTS/FTD)- '+fba+'/'+dba;
-}
-
-function computeBathText(inputs) {
-  var bp3=parseInt(inputs.bathprod)||0, tnk=parseInt(inputs.tanker)||0;
-  var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
-  var bc2=S.nextShift==='C'?bp3:S.prevBathCum+bp3;
-  return '\u2022Bath prod- '+bp3+' mt\n\u2022Cumulative bath- '+bc2+' mt\n'+
-    '\u2022Tanker- '+tnk+' nos\n\u2022Tankers (cumulative)- '+tc2+' nos\n'+
-    '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+(inputs.bathstock||'');
-}
-
-function computeWarehouseText(inputs) {
-  return '\u2022 RAP/SAP/EBB/EAP - '+(inputs.whstock||'')+'\n'+
-    '\u2022 Sent RA/EB - '+(inputs.whsent||'')+'\n'+
-    '\u2022 Rec SA/SB - '+(inputs.whrcv||'');
-}
-
-
-// ===== INIT APP =====
+//// ===== PARSE BUTTON =====
 el('parse-btn').addEventListener('click', function() {
   var txt = el('prev-report-input').value.trim();
   if (!txt) { alert('Please paste the previous shift report.'); return; }
@@ -337,11 +290,6 @@ el('parse-btn').addEventListener('click', function() {
   SECTIONS.forEach(function(sec){ S.data[sec] = null; });
   S.ars3RaFtd = 0;
   S.roddedAnodesCum = 0;
-  
-  // Clear AI data
-  base64Images = [];
-  el('ai-thumbnails').innerHTML = '';
-  el('ai-process-btn').style.display = 'none';
 
   el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
   el('shift-info-box').textContent =
@@ -353,7 +301,6 @@ el('parse-btn').addEventListener('click', function() {
   goPhase(2);
 });
 
-// ===== BUTTON HANDLERS =====
 el('back-btn').addEventListener('click', function(){ goPhase(1); });
 el('gen-btn').addEventListener('click', generateReport);
 el('edit-btn').addEventListener('click', function(){ goPhase(2); renderPreview(); });
@@ -368,21 +315,6 @@ el('copy-btn').addEventListener('click', function(){
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(showCopyFlash).catch(function(){ fallbackCopy(txt); });
   } else { fallbackCopy(txt); }
-});
-
-el('reset-sheet-btn').addEventListener('click', async function(){
-  if(confirm("Are you sure you want to reset all data?\n\nThis will clear current inputs and optionally trigger a Google Apps Script to clear a connected Google Sheet.")) {
-    // To connect to a real Google Sheet, use your Web App URL here:
-    // const scriptUrl = "YOUR_GOOGLE_APPS_SCRIPT_URL";
-    // await fetch(scriptUrl + "?action=reset", { method: 'POST', mode: 'no-cors' });
-    
-    S.data = {};
-    S.inputs = {};
-    SECTIONS.forEach(function(sec){ S.data[sec] = null; });
-    renderGrid();
-    renderPreview();
-    alert("Data cleared locally. (Link your Apps Script URL in the code to clear the remote sheet).");
-  }
 });
 
 function fallbackCopy(txt) {
@@ -405,61 +337,80 @@ el('preview-toggle-btn').addEventListener('click', function(){
   this.textContent = hidden ? 'HIDE' : 'SHOW';
 });
 
-// ===== AI IMAGE UPLOAD & GEMINI API =====
-el('ai-images').addEventListener('change', function(e) {
-  var files = e.target.files;
-  if(!files.length) return;
-  
-  for(let i=0; i<files.length; i++){
-    let file = files[i];
-    let reader = new FileReader();
-    reader.onload = function(event) {
-      let b64 = event.target.result;
-      base64Images.push(b64.split(',')[1]); // Store pure base64
-      let img = document.createElement('img');
-      img.src = b64;
-      img.className = 'thumb';
-      el('ai-thumbnails').appendChild(img);
-    };
-    reader.readAsDataURL(file);
-  }
-  el('ai-process-btn').style.display = 'inline-flex';
-});
-
-el('ai-process-btn').addEventListener('click', async function(){
-  if(base64Images.length === 0) return;
-  
-  el('ai-loader').classList.add('active');
-  
-  try {
-    const response = await fetch(gasWebAppUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8', 
-      },
-      redirect: 'follow', // THIS IS REQUIRED FOR GOOGLE APPS SCRIPT
-      body: JSON.stringify({ images: base64Images }) 
+//// ===== AI IMAGE UPLOAD HANDLERS =====
+function setupImageUpload(inputId, previewId, thumbId, clearId) {
+    var input = el(inputId);
+    input.addEventListener('change', function() {
+        if(this.files && this.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                el(thumbId).src = e.target.result;
+                el(previewId).style.display = 'flex';
+                input.style.display = 'none';
+            }
+            reader.readAsDataURL(this.files[0]);
+        }
     });
+    el(clearId).addEventListener('click', function() {
+        input.value = ''; // clears the input completely
+        el(previewId).style.display = 'none';
+        input.style.display = 'block';
+        el(thumbId).src = '';
+    });
+}
+setupImageUpload('prod-img', 'prod-preview', 'prod-thumb', 'prod-clear');
+setupImageUpload('bd-img', 'bd-preview', 'bd-thumb', 'bd-clear');
 
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+function getBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]); // extract just base64 string
+        reader.onerror = error => reject(error);
+    });
+}
+
+//el('ai-process-btn').addEventListener('click', async function(){
+    const prodInput = el('prod-img');
+    const bdInput = el('bd-img');
     
-    const result = await response.json();
-    
-    if (result.success && result.data) {
-      applyAIData(result.data);
-    } else {
-      console.error("Backend error:", result.error);
-      alert("AI Processing Failed:\n\n" + (result.error || "Unknown error occurred."));
+    if(!prodInput.files.length && !bdInput.files.length) {
+        alert("Please select at least one image before extracting.");
+        return;
     }
     
-  } catch(error) {
-    alert("Network Error: Could not connect to Google Apps Script. Check the console for details.");
-    console.error(error);
-  } finally {
-    el('ai-loader').classList.remove('active');
-  }
+    el('ai-loader').classList.add('active');
+    
+    var base64Array = [];
+    if(prodInput.files.length > 0) base64Array.push(await getBase64(prodInput.files[0]));
+    if(bdInput.files.length > 0) base64Array.push(await getBase64(bdInput.files[0]));
+    
+    try {
+        const response = await fetch(gasWebAppUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            redirect: 'follow', 
+            body: JSON.stringify({ images: base64Array }) 
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            autoFillFromAI(result.data);
+            alert("Data extracted successfully! Check the filled sections.");
+        } else {
+            alert("AI Processing Failed:\n\n" + (result.error || "Unknown error occurred."));
+        }
+    } catch(error) {
+        alert("Network Error: Could not connect to Google Apps Script. Check your Web App URL.\n" + error.message);
+    } finally {
+        el('ai-loader').classList.remove('active');
+    }
 });
-function applyAIData(ai) {
+
+//function autoFillFromAI(ai) {
   // Breakdowns
   if(ai.breakdowns) {
     let existing = S.data['Breakdowns'] || '';
@@ -474,40 +425,82 @@ function applyAIData(ai) {
     saveSection('SBH & Mill', existing ? existing+'\n'+ai.sbh_mill : ai.sbh_mill);
   }
   
-  // Production Data
-  if(ai.ars2 && (ai.ars2.bp || ai.ars2.lul || ai.ars2.ra)) {
-    S.inputs['ARS-2 Production'] = ai.ars2;
-    saveSection('ARS-2 Production', computeArs2Text(ai.ars2), ai.ars2);
-  }
-  if(ai.ars3 && (ai.ars3.ars3ra || ai.ars3.ars3sa)) {
-    S.inputs['ARS-3 Production'] = ai.ars3;
-    saveSection('ARS-3 Production', computeArs3Text(ai.ars3), ai.ars3);
-  }
-  if(ai.bath && (ai.bath.bathprod || ai.bath.tanker || ai.bath.bathstock)) {
-    S.inputs['Bath Handling'] = ai.bath;
-    saveSection('Bath Handling', computeBathText(ai.bath), ai.bath);
-  }
-  if(ai.warehouse && (ai.warehouse.whstock || ai.warehouse.whrcv)) {
-    S.inputs['Warehouse'] = ai.warehouse;
-    saveSection('Warehouse', computeWarehouseText(ai.warehouse), ai.warehouse);
+  // ARS-2 Logic with Strict LUL formatting
+  let ars2 = ai.ars2 || {};
+  if(ars2.lul || ars2.ab || ars2.bp || ars2.rr) {
+    
+    // STRICT LUL LOGIC: Force '800/[extracted value]' format
+    let rawLul = String(ars2.lul || '').replace(/800\s*\/?\s*/g, '').trim(); 
+    let finalLulVal = rawLul ? ('800/' + rawLul) : '800/';
+
+    let bp = parseInt(ars2.bp) || 0;
+    S.roddedAnodesCum = S.nextShift === 'C' ? 0 : (S.prevRoddedAnode || 0);
+
+    let ars2Str = '\u2022 *LUL* Production (Target/Actual)- '+ finalLulVal +'\n'+
+                  '\u2022Rodded anodes (Cumulative)- '+S.roddedAnodesCum+'(M)\n'+
+                  '\u2022Rods hooked- 0\n'+
+                  '\u2022 *CM*/AB/BP- /'+(ars2.ab || '')+'/'+bp+'\n'+
+                  '\u2022RR/RH/SS/RS- '+(ars2.rr || '')+'\n'+
+                  '\u2022Butt/GS production- '+(bp*0.22).toFixed(0)+' mt';
+                  
+    saveSection('ARS-2 Production', ars2Str, {lul: finalLulVal, ab: ars2.ab||'', bp: ars2.bp||'', rr: ars2.rr||'', ra: ''});
   }
   
-  renderGrid();
-  renderPreview();
+  // ARS-3 Logic
+  let ars3 = ai.ars3 || {};
+  if(ars3.ars3ra || ars3.ars3sa || ars3.ars3ba) {
+    var fra=parseInt(ars3.ars3ra)||0, fba=parseInt(ars3.ars3ba)||0;
+    var ars3saRaw = String(ars3.ars3sa||'').trim();
+    var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : parseInt(ars3saRaw)||0;
+    var dra=S.nextShift==='C'?fra:S.prevArs3Ra+fra;
+    var dsa=S.nextShift==='C'?fsa:S.prevArs3Sa+fsa;
+    var dba=S.nextShift==='C'?fba:S.prevArs3Ba+fba;
+    S.ars3RaFtd = dra;
+    
+    let ars3Str = '*SHIFT: C+A+B*\n'+
+                  'RA production(FTS/FTD): '+fra+'/'+dra+'\n'+
+                  'SA processed: (FTS/FTD)- '+fsa+'/'+dsa+'\n'+
+                  'BA received(sets):(FTS/FTD)- '+fba+'/'+dba;
+                  
+    saveSection('ARS-3 Production', ars3Str, {ars3ra: ars3.ars3ra||'', ars3sa: ars3.ars3sa||'', ars3ba: ars3.ars3ba||''});
+  }
+
+  // Bath Logic
+  let bath = ai.bath || {};
+  if(bath.bathprod || bath.tanker || bath.bathstock) {
+    var bp3=parseInt(bath.bathprod)||0, tnk=parseInt(bath.tanker)||0;
+    var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
+    var bc2=S.nextShift==='C'?bp3:S.prevBathCum+bp3;
+    let bathStr = '\u2022Bath prod- '+bp3+' mt\n\u2022Cumulative bath- '+bc2+' mt\n'+
+                  '\u2022Tanker- '+tnk+' nos\n\u2022Tankers (cumulative)- '+tc2+' nos\n'+
+                  '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+(bath.bathstock || '');
+    saveSection('Bath Handling', bathStr, {bathprod: bath.bathprod||'', tanker: bath.tanker||'', bathstock: bath.bathstock||''});
+  }
+
+  // Warehouse Logic
+  let wh = ai.warehouse || {};
+  if(wh.whstock || wh.whsent || wh.whrcv) {
+    let whStr = '\u2022 RAP/SAP/EBB/EAP - '+(wh.whstock||'')+'\n'+
+                '\u2022 Sent RA/EB - '+(wh.whsent||'')+'\n'+
+                '\u2022 Rec SA/SB - '+(wh.whrcv||'');
+    saveSection('Warehouse', whStr, {whstock: wh.whstock||'', whsent: wh.whsent||'', whrcv: wh.whrcv||''});
+  }
 }
 
-
-// ===== GRID & PREVIEW =====
+//// ===== GRID & PREVIEW =====
 function renderGrid() {
   var grid = el('section-grid');
   grid.innerHTML = '';
   SECTIONS.forEach(function(sec, i) {
     var btn = document.createElement('button');
-    btn.className = 'section-btn' + (S.data[sec] !== null ? ' filled' : '');
+    var isFilled = S.data[sec] !== null;
+    if (sec === 'Total RA Cumulative') isFilled = false; // Hide checkmark, auto calcs in background
+    
+    btn.className = 'section-btn' + (isFilled ? ' filled' : '');
     btn.innerHTML =
       '<div class="sec-num">#' + String(i+1).padStart(2,'0') + '</div>' +
       '<div class="sec-name">' + sec + '</div>' +
-      '<div class="sec-tick">&#10004; filled</div>';
+      '<div class="sec-tick" style="' + (isFilled ? 'display:block;' : 'display:none;') + '">&#10004; filled</div>';
     btn.addEventListener('click', (function(s){ return function(){ openModal(s); }; })(sec));
     grid.appendChild(btn);
   });
@@ -545,7 +538,6 @@ function openModal(section) {
   body.appendChild(t);
   body.appendChild(buildForm(section));
   
-  // Restore inputs
   if (SECTION_FIELDS[section]) restoreInputs(section, SECTION_FIELDS[section]);
   el('modal-overlay').classList.add('open');
 }
@@ -554,7 +546,12 @@ function closeModal() { el('modal-overlay').classList.remove('open'); }
 
 function saveSection(section, value, rawInputs) {
   S.data[section] = value;
-  if (rawInputs) S.inputs[section] = rawInputs;
+  if (rawInputs) Object.assign(S.inputs[section] = S.inputs[section] || {}, rawInputs);
+  
+  // Auto Calc Total RA Cumulative
+  var t = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
+  S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)='+(S.roddedAnodesCum || 0)+'+'+(S.ars3RaFtd || 0)+'='+t;
+
   closeModal();
   renderGrid();
   renderPreview();
@@ -586,6 +583,12 @@ function saveCancelRow(fn) {
   row.appendChild(sb); row.appendChild(cb);
   return row;
 }
+function regexParse(raw, re) {
+  var p = {}, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(raw)) !== null) { p[m[1]] = m[2]; }
+  return p;
+}
 
 el('modal-body').addEventListener('click', function(e) {
   var btn = e.target.closest ? e.target.closest('[data-tg]') : null;
@@ -605,15 +608,7 @@ function pane(group, idx, content, hidden) {
   return '<div id="' + group + '-pane-' + idx + '"' + (hidden?' class="hidden"':'') + '>' + content + '</div>';
 }
 
-function regexParse(raw, re) {
-  var p = {}, m;
-  re.lastIndex = 0;
-  while ((m = re.exec(raw)) !== null) { p[m[1]] = m[2]; }
-  return p;
-}
-
-// ===== FORMS =====
-function buildForm(section) {
+//function buildForm(section) {
   var wrap = document.createElement('div');
 
   if (section === 'Compliance') {
@@ -642,8 +637,43 @@ function buildForm(section) {
       fld('ra','Rodded Anodes (CM1,CM2 or single)','text','e.g. 120,130');
 
     wrap.appendChild(saveCancelRow(function(){
-      let inputs = {lul:val('lul'), ab:val('ab'), bp:val('bp'), rr:val('rr'), ra:val('ra')};
-      saveSection('ARS-2 Production', computeArs2Text(inputs), inputs);
+      var raRaw = val('ra'), roddedAnodes, cmDisplay;
+      if (raRaw.indexOf(',') !== -1) {
+        var parts = raRaw.split(',').map(function(v){ var n=parseInt(v.trim()); return isNaN(n)?0:n; });
+        roddedAnodes = parts.reduce(function(a,b){return a+b;},0);
+        cmDisplay = roddedAnodes+'('+parts.join('/')+')';
+      } else {
+        roddedAnodes = parseInt(raRaw)||0;
+        cmDisplay = String(roddedAnodes);
+      }
+      var bp = ival('bp');
+      S.roddedAnodesCum = S.nextShift==='C' ? roddedAnodes : S.prevRoddedAnode + roddedAnodes;
+
+      var lulRaw = val('lul').trim();
+      var lulDisplay = lulRaw;
+      var slashIdx = lulRaw.indexOf('/');
+      if (slashIdx !== -1) {
+        var lulTarget = lulRaw.substring(0, slashIdx).trim();
+        var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
+        var lulParts = lulActualRaw.split(',');
+        if (lulParts.length >= 2) {
+          var v1str = lulParts[0].trim();
+          var v2str = lulParts[1].trim();
+          var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
+          var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
+          var lulSum = v1 + v2;
+          lulDisplay = lulTarget + '/' + lulSum + '(' + v1 + '/' + v2 + ')';
+        }
+      }
+
+      saveSection('ARS-2 Production',
+        '\u2022 *LUL* Production (Target/Actual)- '+lulDisplay+'\n'+
+        '\u2022Rodded anodes (Cumulative)- '+S.roddedAnodesCum+'(M)\n'+
+        '\u2022Rods hooked- 0\n'+
+        '\u2022 *CM*/AB/BP- '+cmDisplay+'/'+val('ab')+'/'+bp+'\n'+
+        '\u2022RR/RH/SS/RS- '+val('rr')+'\n'+
+        '\u2022Butt/GS production- '+(bp*0.22).toFixed(0)+' mt',
+        {lul:val('lul'),ab:val('ab'),bp:val('bp'),rr:val('rr'),ra:val('ra')});
     }));
   }
 
@@ -654,15 +684,26 @@ function buildForm(section) {
       fld('ars3ba','BA Received sets (FTS)','number','');
 
     wrap.appendChild(saveCancelRow(function(){
-      let inputs = {ars3ra:val('ars3ra'),ars3sa:val('ars3sa'),ars3ba:val('ars3ba')};
-      saveSection('ARS-3 Production', computeArs3Text(inputs), inputs);
+      var fra=ival('ars3ra'), fba=ival('ars3ba');
+      var ars3saRaw = val('ars3sa').trim();
+      var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : parseInt(ars3saRaw)||0;
+      var dra=S.nextShift==='C'?fra:S.prevArs3Ra+fra;
+      var dsa=S.nextShift==='C'?fsa:S.prevArs3Sa+fsa;
+      var dba=S.nextShift==='C'?fba:S.prevArs3Ba+fba;
+      S.ars3RaFtd = dra;
+      saveSection('ARS-3 Production',
+        '*SHIFT: C+A+B*\n'+
+        'RA production(FTS/FTD): '+fra+'/'+dra+'\n'+
+        'SA processed: (FTS/FTD)- '+fsa+'/'+dsa+'\n'+
+        'BA received(sets):(FTS/FTD)- '+fba+'/'+dba,
+        {ars3ra:val('ars3ra'),ars3sa:val('ars3sa'),ars3ba:val('ars3ba')});
     }));
   }
 
   else if (section === 'Total RA Cumulative') {
     var total = (S.roddedAnodesCum||0)+(S.ars3RaFtd||0);
     wrap.innerHTML = '<div class="info-box">ARS-2 Cumulative: <b>'+(S.roddedAnodesCum||0)+
-      '</b> + ARS-3 FTD: <b>'+(S.ars3RaFtd||0)+'</b> = <b>'+total+'</b><br>Fill ARS-2 and ARS-3 first, then come back.</div>';
+      '</b> + ARS-3 FTD: <b>'+(S.ars3RaFtd||0)+'</b> = <b>'+total+'</b><br>This section is automatically calculated when you save ARS-2 and ARS-3 Production sections.</div>';
     wrap.appendChild(saveCancelRow(function(){
       var t=(S.roddedAnodesCum||0)+(S.ars3RaFtd||0);
       saveSection('Total RA Cumulative','(Ars-2+Ars-3)='+(S.roddedAnodesCum||0)+'+'+(S.ars3RaFtd||0)+'='+t);
@@ -677,18 +718,35 @@ function buildForm(section) {
         fld('tanker','Tankers Sent (nos)','number','')+
         fld('bathstock','RBS1/RBS2/F1/F2/F3/F4','text','e.g. 115/157/420/457/475/450')
       ) +
-      pane('bath',1, tarea('bathcopied','Paste copied data (multiline)', 'T-9\nP-361...'), true);
+      pane('bath',1,
+        tarea('bathcopied','Paste copied data (multiline or concatenated)',
+          'T-9\nP-361\nR1-240\n...\nor T-9P-361R1-240...'),
+        true
+      );
 
     wrap.appendChild(saveCancelRow(function(){
       if (!el('bath-pane-1').classList.contains('hidden')) {
         var raw = val('bathcopied').replace(/\s+/g,'');
         var p = regexParse(raw, /([A-Za-z]+\d*)-(\d+)/gi);
         var t=parseInt(p['T']||p['t'])||0, bp2=parseInt(p['P']||p['p'])||0;
-        let inputs = { bathprod: bp2, tanker: t, bathstock: (parseInt(p['R1']||p['r1'])||0)+'/'+(parseInt(p['R2']||p['r2'])||0)+'/'+(parseInt(p['F1']||p['f1'])||0)+'/'+(parseInt(p['F2']||p['f2'])||0)+'/'+(parseInt(p['F3']||p['f3'])||0)+'/'+(parseInt(p['F4']||p['f4'])||0) };
-        saveSection('Bath Handling', computeBathText(inputs), inputs);
+        var tc=S.nextShift==='C'?t:S.prevTankerCum+t;
+        var bc=S.nextShift==='C'?bp2:S.prevBathCum+bp2;
+        saveSection('Bath Handling',
+          '\u2022Bath prod- '+bp2+' mt\n\u2022Cumulative bath- '+bc+' mt\n'+
+          '\u2022Tanker- '+t+' nos\n\u2022Tankers (cumulative)- '+tc+' nos\n'+
+          '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+
+          (parseInt(p['R1']||p['r1'])||0)+'/'+(parseInt(p['R2']||p['r2'])||0)+'/'+
+          (parseInt(p['F1']||p['f1'])||0)+'/'+(parseInt(p['F2']||p['f2'])||0)+'/'+
+          (parseInt(p['F3']||p['f3'])||0)+'/'+(parseInt(p['F4']||p['f4'])||0));
       } else {
-        let inputs = {bathprod:val('bathprod'),tanker:val('tanker'),bathstock:val('bathstock')};
-        saveSection('Bath Handling', computeBathText(inputs), inputs);
+        var bp3=ival('bathprod'), tnk=ival('tanker');
+        var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
+        var bc2=S.nextShift==='C'?bp3:S.prevBathCum+bp3;
+        saveSection('Bath Handling',
+          '\u2022Bath prod- '+bp3+' mt\n\u2022Cumulative bath- '+bc2+' mt\n'+
+          '\u2022Tanker- '+tnk+' nos\n\u2022Tankers (cumulative)- '+tc2+' nos\n'+
+          '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+val('bathstock'),
+          {bathprod:val('bathprod'),tanker:val('tanker'),bathstock:val('bathstock')});
       }
     }));
   }
@@ -701,18 +759,27 @@ function buildForm(section) {
         fld('whsent','Sent RA/EB','text','e.g. 612/94')+
         fld('whrcv','Rec SA/SB','text','e.g. 692/102')
       ) +
-      pane('wh',1, tarea('whcopied','Paste copied data (multiline)', 'Ra-654\nSa-600...'), true);
+      pane('wh',1,
+        tarea('whcopied','Paste copied data (multiline or concatenated)',
+          'Ra-654\nSa-600\nEb-71\n...\nor Ra-654Sa-600Eb-71...'),
+        true
+      );
 
     wrap.appendChild(saveCancelRow(function(){
       if (!el('wh-pane-1').classList.contains('hidden')) {
         var raw = val('whcopied').replace(/\s+/g,'');
         var p = regexParse(raw, /([A-Za-z]+)-(\d+)/gi);
         function gp(k){ return parseInt(p[k]||p[k.toLowerCase()]||p[k.toUpperCase()])||0; }
-        let inputs = { whstock: gp('Rap')+'/'+gp('Sap')+'/'+gp('Ebb')+'/'+gp('Eap'), whsent: gp('Ra')+'/'+gp('Eb'), whrcv: gp('Sa')+'/'+gp('Sb') };
-        saveSection('Warehouse', computeWarehouseText(inputs), inputs);
+        saveSection('Warehouse',
+          '\u2022 RAP/SAP/EBB/EAP - '+gp('Rap')+'/'+gp('Sap')+'/'+gp('Ebb')+'/'+gp('Eap')+'\n'+
+          '\u2022 Sent RA/EB - '+gp('Ra')+'/'+gp('Eb')+'\n'+
+          '\u2022 Rec SA/SB - '+gp('Sa')+'/'+gp('Sb'));
       } else {
-        let inputs = {whstock:val('whstock'),whsent:val('whsent'),whrcv:val('whrcv')};
-        saveSection('Warehouse', computeWarehouseText(inputs), inputs);
+        saveSection('Warehouse',
+          '\u2022 RAP/SAP/EBB/EAP - '+val('whstock')+'\n'+
+          '\u2022 Sent RA/EB - '+val('whsent')+'\n'+
+          '\u2022 Rec SA/SB - '+val('whrcv'),
+          {whstock:val('whstock'),whsent:val('whsent'),whrcv:val('whrcv')});
       }
     }));
   }
@@ -727,13 +794,15 @@ function buildForm(section) {
       appendHtml +
       tabs('bd',['Type-1 (Manual)','Type-2 (Copied)']) +
       pane('bd',0, tarea('bd1','Enter breakdowns (/ for new lines, or one per line)','')) +
-      pane('bd',1, tarea('bd2','Paste copied data', 'Loop-7, Torque overload\n07:00:00...'), true);
-    
+      pane('bd',1, tarea('bd2','Paste copied data - multiline or concatenated both work',
+        'Loop-7, Torque overload\n07:00:00\n07:15:00\n\nBC-11, choke\n12:00:00\n12:20:00'), true);
     wrap.appendChild(saveCancelRow(function(){
       var processed;
       if (!el('bd-pane-1').classList.contains('hidden')) {
         var raw = val('bd2');
-        var norm = raw.replace(/\r\n/g,'\n').replace(/\n+/g,'\n').replace(/\n(\d{2}:\d{2}:\d{2})/g,'$1').replace(/(\d{2}:\d{2}:\d{2})\n(\d{2}:\d{2}:\d{2})/g,'$1$2');
+        var norm = raw.replace(/\r\n/g,'\n').replace(/\n+/g,'\n');
+        norm = norm.replace(/\n(\d{2}:\d{2}:\d{2})/g,'$1');
+        norm = norm.replace(/(\d{2}:\d{2}:\d{2})\n(\d{2}:\d{2}:\d{2})/g,'$1$2');
         var re3 = /(.+?)(\d{2}:\d{2}):\d{2}(\d{2}:\d{2}):\d{2}/g;
         var ev3, lines = [];
         var now = new Date(), eightAgo = new Date(now - 8*3600*1000);
@@ -774,7 +843,8 @@ function buildForm(section) {
       var newVal = val('sbh_data');
       var modeBtn = document.querySelector('[data-tg="sbhmode"].active');
       var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
-      saveSection('SBH & Mill', sbhExisting ? (isOverwrite ? (newVal || sbhExisting) : (newVal ? sbhExisting+'\n'+newVal : sbhExisting)) : newVal);
+      var combined = sbhExisting ? (isOverwrite ? (newVal || sbhExisting) : (newVal ? sbhExisting+'\n'+newVal : sbhExisting)) : newVal;
+      saveSection('SBH & Mill', combined);
     }));
   }
 
@@ -787,37 +857,61 @@ function buildForm(section) {
       var newVal = val('rmt_data');
       var modeBtn = document.querySelector('[data-tg="rmtmode"].active');
       var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
-      saveSection('RMT', rmtExisting ? (isOverwrite ? (newVal || rmtExisting) : (newVal ? rmtExisting+'\n'+newVal : rmtExisting)) : newVal);
+      var combined = rmtExisting ? (isOverwrite ? (newVal || rmtExisting) : (newVal ? rmtExisting+'\n'+newVal : rmtExisting)) : newVal;
+      saveSection('RMT', combined);
     }));
   }
 
   else if (section === 'Manpower') {
-    wrap.innerHTML = fld('vl','VL (Planned/Actual)','text','e.g. 2/1') + fld('ske','SKE (Planned/Actual)','text','e.g. 5/5');
+    wrap.innerHTML =
+      fld('vl','VL (Planned/Actual)','text','e.g. 2/1') +
+      fld('ske','SKE (Planned/Actual)','text','e.g. 5/5');
+
     wrap.appendChild(saveCancelRow(function(){
-      saveSection('Manpower', '\u2022VL(Planned/Actual)-'+val('vl')+'\n\u2022SKE(Planned/Actual)-'+val('ske'), {vl:val('vl'),ske:val('ske')});
+      saveSection('Manpower',
+        '\u2022VL(Planned/Actual)-'+val('vl')+'\n\u2022SKE(Planned/Actual)-'+val('ske'),
+        {vl:val('vl'),ske:val('ske')});
     }));
   }
 
   else if (section === 'Vehicles') {
-    wrap.innerHTML = tabs('veh',['Manual','Use Previous']) + pane('veh',0, fld('forklift','Forklift (3T/10T)','text','e.g. 1/1')+fld('atv','ATV count','text','e.g. 2')) + pane('veh',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.vehicleContent||'No vehicle data found.')+'</div>', true);
+    wrap.innerHTML =
+      tabs('veh',['Manual','Use Previous']) +
+      pane('veh',0, fld('forklift','Forklift (3T/10T)','text','e.g. 1/1')+fld('atv','ATV count','text','e.g. 2')) +
+      pane('veh',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.vehicleContent||'No vehicle data found.')+'</div>', true);
+
     wrap.appendChild(saveCancelRow(function(){
-      if (!el('veh-pane-1').classList.contains('hidden')) { saveSection('Vehicles', S.vehicleContent); } 
-      else { saveSection('Vehicles', '\u2022Forklift (3T/10T)- '+val('forklift')+'\n\u2022ATV-'+val('atv'), {forklift:val('forklift'),atv:val('atv')}); }
+      if (!el('veh-pane-1').classList.contains('hidden')) {
+        saveSection('Vehicles', S.vehicleContent);
+      } else {
+        saveSection('Vehicles',
+          '\u2022Forklift (3T/10T)- '+val('forklift')+'\n\u2022ATV-'+val('atv'),
+          {forklift:val('forklift'),atv:val('atv')});
+      }
     }));
   }
 
   else if (section === 'Furnace') {
-    wrap.innerHTML = tabs('fur',['Manual','Use Previous']) + pane('fur',0, fld('furnacein','Furnace in operation info','text','')) + pane('fur',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.furnaceContent||'No furnace data found.')+'</div>', true);
+    wrap.innerHTML =
+      tabs('fur',['Manual','Use Previous']) +
+      pane('fur',0, fld('furnacein','Furnace in operation info','text','')) +
+      pane('fur',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.furnaceContent||'No furnace data found.')+'</div>', true);
+
     wrap.appendChild(saveCancelRow(function(){
-      if (!el('fur-pane-1').classList.contains('hidden')) { saveSection('Furnace', S.furnaceContent); } 
-      else { saveSection('Furnace', '\u2022Ladle: 04 running,  2 preheating & 2 air dry\n\u2022Furnace in per- '+val('furnacein'), {furnacein:val('furnacein')}); }
+      if (!el('fur-pane-1').classList.contains('hidden')) {
+        saveSection('Furnace', S.furnaceContent);
+      } else {
+        saveSection('Furnace',
+          '\u2022Ladle: 04 running,  2 preheating & 2 air dry\n\u2022Furnace in per- '+val('furnacein'),
+          {furnacein:val('furnacein')});
+      }
     }));
   }
 
   return wrap;
 }
 
-// ===== GENERATE REPORT =====
+//// ===== GENERATE =====
 function generateReport() {
   var report = '\n*Date:-'+S.nextDate+'*\n*Shift:-'+S.nextShift+'*\n\n';
   SECTIONS.forEach(function(sec){
