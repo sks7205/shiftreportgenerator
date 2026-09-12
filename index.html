@@ -61,7 +61,6 @@ textarea{resize:vertical;min-height:80px;}
 .copy-flash{position:absolute;top:-30px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .3s;}
 .copy-flash.show{opacity:1;}
 
-/* Updated Upload Styles */
 .ai-zone{background:rgba(59,130,246,.05);border:1px dashed var(--accent2);border-radius:var(--radius);padding:16px;margin-bottom:18px;position:relative;overflow:hidden;}
 .ai-zone-title{font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
 .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
@@ -76,6 +75,7 @@ textarea{resize:vertical;min-height:80px;}
 .loader-overlay.active{display:flex;}
 .spinner{width:30px;height:30px;border:3px solid var(--surface2);border-top-color:var(--accent2);border-radius:50%;animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+.resume-banner { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--green); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
 </style>
 </head>
 <body>
@@ -88,6 +88,7 @@ textarea{resize:vertical;min-height:80px;}
   <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:5%"></div></div>
 
   <div id="phase-prev-report" class="active">
+    <div id="resume-container"></div>
     <div class="card">
       <div class="card-title">Step 1 - Paste Previous Shift Report</div>
       <label>Previous Shift Report</label>
@@ -173,9 +174,9 @@ textarea{resize:vertical;min-height:80px;}
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", async function() {
 
-//// ==============================================================================
+// ==============================================================================
 // ⚠️ REPLACE WITH YOUR ACTUAL GOOGLE APPS SCRIPT URL ⚠️
 const gasWebAppUrl = "https://script.google.com/macros/s/AKfycbzZCzqEqlzECGkfI8hCjucAGjdMbq9IPSWkfcDZy0ocOe1zERIEXBJv_a9WZaC8xEbbPw/exec";
 // ==============================================================================
@@ -186,12 +187,148 @@ var SECTIONS = [
 ];
 
 var S = {
+  currentPhase: 1,
+  activeModal: null,
+  prevReportRaw: '',
   prevReport:'', prevDate:null, prevShift:null, nextDate:null, nextShift:null,
   prevTankerCum:0, prevBathCum:0, prevRoddedAnode:0,
   prevArs3Ra:0, prevArs3Sa:0, prevArs3Ba:0,
   furnaceContent:'', vehicleContent:'',
   data:{}, inputs:{}, ars3RaFtd:0, roddedAnodesCum:0
 };
+
+// ===== PERSISTENT INDEXEDDB ENGINE =====
+const DB_NAME = 'ARS_Report_DB_GAS';
+const STORE_NAME = 'report_state';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function persistState() {
+  var serialized = JSON.stringify(S);
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(serialized, 'current_draft');
+  } catch (err) {
+    console.warn('IndexedDB write error, falling back:', err);
+  }
+  try {
+    localStorage.setItem('ars_report_gas_backup', serialized);
+  } catch (e) {}
+}
+
+async function clearSavedState() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete('current_draft');
+  } catch (e) {}
+  try {
+    localStorage.removeItem('ars_report_gas_backup');
+  } catch (e) {}
+}
+
+async function checkAndRestoreState() {
+  let raw = null;
+  try {
+    const db = await openDB();
+    raw = await new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get('current_draft');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {}
+
+  if (!raw) {
+    try {
+      raw = localStorage.getItem('ars_report_gas_backup');
+    } catch (e) {}
+  }
+
+  if (!raw) return false;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed) return false;
+
+    S = Object.assign(S, parsed);
+
+    if (S.prevReportRaw && el('prev-report-input')) {
+      el('prev-report-input').value = S.prevReportRaw;
+    }
+
+    if (S.nextDate && S.nextShift) {
+      el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
+      el('shift-info-box').textContent =
+        'Generating for: Date ' + S.nextDate + '  |  Shift ' + S.nextShift +
+        '  |  Prev Tanker Cum: ' + S.prevTankerCum +
+        '  |  Prev Bath Cum: ' + S.prevBathCum;
+
+      renderGrid();
+      renderPreview();
+      renderResumeBanner();
+
+      if (S.currentPhase === 2 || S.currentPhase === 3) {
+        goPhase(S.currentPhase);
+        if (S.activeModal) openModal(S.activeModal);
+        return true;
+      }
+    }
+    return false;
+  } catch (err) {
+    console.error('State restore error:', err);
+    return false;
+  }
+}
+
+function renderResumeBanner() {
+  var container = el('resume-container');
+  if (!container) return;
+  var hasExistingData = Object.keys(S.data || {}).some(k => S.data[k] !== null && S.data[k] !== undefined);
+  if (hasExistingData && S.nextDate) {
+    container.innerHTML = `
+      <div class="resume-banner">
+        <div>
+          <b style="color:var(--green)">Unsaved Shift Draft:</b> ${S.nextDate} (Shift ${S.nextShift})
+        </div>
+        <button class="btn btn-success" id="resume-draft-btn" style="padding: 5px 12px; font-size: 12px;">RESUME DRAFT &#8594;</button>
+      </div>`;
+    el('resume-draft-btn').addEventListener('click', function() {
+      goPhase(2);
+    });
+  } else {
+    container.innerHTML = '';
+  }
+}
+
+// Live typing tracking
+el('prev-report-input').addEventListener('input', function() {
+  S.prevReportRaw = this.value;
+  persistState();
+});
+
+el('modal-body').addEventListener('input', function(e) {
+  if (!S.activeModal) return;
+  var sec = S.activeModal;
+  S.inputs[sec] = S.inputs[sec] || {};
+  if (e.target.id) {
+    S.inputs[sec][e.target.id] = e.target.value;
+    persistState();
+  }
+});
 
 // ===== UTILS =====
 function el(id) { return document.getElementById(id); }
@@ -216,7 +353,6 @@ function nextShiftCalc(prevDate, prevShift) {
   var dt;
   if(prevDate.includes('/')) {
     var p = prevDate.split('/').map(Number);
-    // Assumes DD/MM/YYYY. If YYYY/MM/DD modify this logic.
     dt = new Date(p[2] < 100 ? p[2] + 2000 : p[2], p[1]-1, p[0]);
   } else if (prevDate.includes('-')) {
     var p = prevDate.split('-').map(Number);
@@ -250,10 +386,12 @@ function restoreInputs(section, ids) {
 }
 
 function goPhase(n) {
+  S.currentPhase = n;
   ['phase-prev-report','phase-section-select','phase-report-out'].forEach(function(id,i){
     el(id).classList.toggle('active', i === n-1);
   });
   el('prog-fill').style.width = (n===1?5:n===2?50:100)+'%';
+  persistState();
 }
 
 //// ===== PARSE BUTTON =====
@@ -261,7 +399,6 @@ el('parse-btn').addEventListener('click', function() {
   var txt = el('prev-report-input').value.trim();
   if (!txt) { alert('Please paste the previous shift report.'); return; }
 
-  // More flexible Regex for Date and Shift
   var prevDate    = xStr(/Date\s*(?:[:-]+)?\s*([\d\/.-]+)/i, txt);
   var prevShiftRaw = xStr(/Shift\s*(?:[:-]+)?\s*([ABC])/i, txt);
 
@@ -270,8 +407,13 @@ el('parse-btn').addEventListener('click', function() {
     return;
   }
 
-  S.prevDate  = prevDate;
-  S.prevShift = prevShiftRaw.toUpperCase();
+  var newPrevDate = prevDate;
+  var newPrevShift = prevShiftRaw.toUpperCase();
+  var isSameShift = (S.prevDate === newPrevDate && S.prevShift === newPrevShift);
+
+  S.prevReportRaw = txt;
+  S.prevDate  = newPrevDate;
+  S.prevShift = newPrevShift;
 
   var ns = nextShiftCalc(S.prevDate, S.prevShift);
   S.nextDate  = ns.nextDate;
@@ -296,11 +438,13 @@ el('parse-btn').addEventListener('click', function() {
   if (vc) vc = vc.replace(/\./g,'\n').replace(/\u2022/g,'\n\u2022');
   S.vehicleContent = vc;
 
-  S.data = {};
-  S.inputs = {};
-  SECTIONS.forEach(function(sec){ S.data[sec] = null; });
-  S.ars3RaFtd = 0;
-  S.roddedAnodesCum = 0;
+  if (!isSameShift) {
+    S.data = {};
+    S.inputs = {};
+    SECTIONS.forEach(function(sec){ S.data[sec] = null; });
+    S.ars3RaFtd = 0;
+    S.roddedAnodesCum = 0;
+  }
 
   el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
   el('shift-info-box').textContent =
@@ -309,16 +453,33 @@ el('parse-btn').addEventListener('click', function() {
     '  |  Prev Bath Cum: ' + S.prevBathCum;
 
   renderGrid();
+  renderPreview();
   goPhase(2);
 });
 
-el('back-btn').addEventListener('click', function(){ goPhase(1); });
+el('back-btn').addEventListener('click', function(){ 
+  renderResumeBanner();
+  goPhase(1); 
+});
+
 el('gen-btn').addEventListener('click', generateReport);
 el('edit-btn').addEventListener('click', function(){ goPhase(2); renderPreview(); });
-el('reset-btn').addEventListener('click', function(){
-  el('prev-report-input').value = '';
-  el('header-shift').textContent = '-- / --';
-  goPhase(1);
+el('reset-btn').addEventListener('click', async function(){
+  if (confirm("Start a new report? This will erase current progress.")) {
+    await clearSavedState();
+    S.prevReportRaw = '';
+    S.data = {};
+    S.inputs = {};
+    S.prevDate = null;
+    S.prevShift = null;
+    S.nextDate = null;
+    S.nextShift = null;
+    S.activeModal = null;
+    el('prev-report-input').value = '';
+    el('header-shift').textContent = '-- / --';
+    renderResumeBanner();
+    goPhase(1);
+  }
 });
 
 el('copy-btn').addEventListener('click', function(){
@@ -363,7 +524,7 @@ function setupImageUpload(inputId, previewId, thumbId, clearId) {
         }
     });
     el(clearId).addEventListener('click', function() {
-        input.value = ''; // clears the input completely
+        input.value = '';
         el(previewId).style.display = 'none';
         input.style.display = 'block';
         el(thumbId).src = '';
@@ -376,7 +537,7 @@ function getBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result.split(',')[1]); // extract just base64 string
+        reader.onload = () => resolve(reader.result.split(',')[1]);
         reader.onerror = error => reject(error);
     });
 }
@@ -428,7 +589,6 @@ el('ai-process-btn').addEventListener('click', async function(){
 });
 
 function autoFillFromAI(ai) {
-  // Breakdowns
   if(ai.breakdowns) {
     let existing = S.data['Breakdowns'] || '';
     saveSection('Breakdowns', existing ? existing+'\n'+ai.breakdowns : ai.breakdowns);
@@ -442,11 +602,8 @@ function autoFillFromAI(ai) {
     saveSection('SBH & Mill', existing ? existing+'\n'+ai.sbh_mill : ai.sbh_mill);
   }
   
-  // ARS-2 Logic with Strict LUL formatting
   let ars2 = ai.ars2 || {};
   if(ars2.lul || ars2.ab || ars2.bp || ars2.rr) {
-    
-    // STRICT LUL LOGIC: Force '800/[extracted value]' format
     let rawLul = String(ars2.lul || '').replace(/800\s*\/?\s*/g, '').trim(); 
     let finalLulVal = rawLul ? ('800/' + rawLul) : '800/';
 
@@ -463,7 +620,6 @@ function autoFillFromAI(ai) {
     saveSection('ARS-2 Production', ars2Str, {lul: finalLulVal, ab: ars2.ab||'', bp: ars2.bp||'', rr: ars2.rr||'', ra: ''});
   }
   
-  // ARS-3 Logic
   let ars3 = ai.ars3 || {};
   if(ars3.ars3ra || ars3.ars3sa || ars3.ars3ba) {
     var fra=parseInt(ars3.ars3ra)||0, fba=parseInt(ars3.ars3ba)||0;
@@ -482,7 +638,6 @@ function autoFillFromAI(ai) {
     saveSection('ARS-3 Production', ars3Str, {ars3ra: ars3.ars3ra||'', ars3sa: ars3.ars3sa||'', ars3ba: ars3.ars3ba||''});
   }
 
-  // Bath Logic
   let bath = ai.bath || {};
   if(bath.bathprod || bath.tanker || bath.bathstock) {
     var bp3=parseInt(bath.bathprod)||0, tnk=parseInt(bath.tanker)||0;
@@ -494,7 +649,6 @@ function autoFillFromAI(ai) {
     saveSection('Bath Handling', bathStr, {bathprod: bath.bathprod||'', tanker: bath.tanker||'', bathstock: bath.bathstock||''});
   }
 
-  // Warehouse Logic
   let wh = ai.warehouse || {};
   if(wh.whstock || wh.whsent || wh.whrcv) {
     let whStr = '\u2022 RAP/SAP/EBB/EAP - '+(wh.whstock||'')+'\n'+
@@ -510,8 +664,8 @@ function renderGrid() {
   grid.innerHTML = '';
   SECTIONS.forEach(function(sec, i) {
     var btn = document.createElement('button');
-    var isFilled = S.data[sec] !== null;
-    if (sec === 'Total RA Cumulative') isFilled = false; // Hide checkmark, auto calcs in background
+    var isFilled = S.data[sec] !== null && S.data[sec] !== undefined;
+    if (sec === 'Total RA Cumulative') isFilled = false;
     
     btn.className = 'section-btn' + (isFilled ? ' filled' : '');
     btn.innerHTML =
@@ -524,7 +678,7 @@ function renderGrid() {
 }
 
 function renderPreview() {
-  var filled = SECTIONS.filter(function(s){ return S.data[s] !== null; });
+  var filled = SECTIONS.filter(function(s){ return S.data[s] !== null && S.data[s] !== undefined; });
   var card = el('preview-card');
   if (filled.length === 0) { card.style.display = 'none'; return; }
   card.style.display = 'block';
@@ -540,14 +694,20 @@ var SECTION_FIELDS = {
   'Compliance':        ['nm','uauc','permits','m2notif'],
   'ARS-2 Production':  ['lul','ab','bp','rr','ra'],
   'ARS-3 Production':  ['ars3ra','ars3sa','ars3ba'],
-  'Bath Handling':     ['bathprod','tanker','bathstock'],
-  'Warehouse':         ['whstock','whsent','whrcv'],
+  'Bath Handling':     ['bathprod','tanker','bathstock','bathcopied'],
+  'Warehouse':         ['whstock','whsent','whrcv','whcopied'],
+  'Breakdowns':        ['bd1','bd2'],
+  'SBH & Mill':        ['sbh_data'],
+  'RMT':               ['rmt_data'],
   'Manpower':          ['vl','ske'],
   'Vehicles':          ['forklift','atv'],
   'Furnace':           ['furnacein']
 };
 
 function openModal(section) {
+  S.activeModal = section;
+  persistState();
+
   var body = el('modal-body');
   body.innerHTML = '';
   var t = document.createElement('div');
@@ -559,19 +719,23 @@ function openModal(section) {
   el('modal-overlay').classList.add('open');
 }
 
-function closeModal() { el('modal-overlay').classList.remove('open'); }
+function closeModal() { 
+  S.activeModal = null;
+  persistState();
+  el('modal-overlay').classList.remove('open'); 
+}
 
 function saveSection(section, value, rawInputs) {
   S.data[section] = value;
   if (rawInputs) Object.assign(S.inputs[section] = S.inputs[section] || {}, rawInputs);
   
-  // Auto Calc Total RA Cumulative
   var t = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
   S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)='+(S.roddedAnodesCum || 0)+'+'+(S.ars3RaFtd || 0)+'='+t;
 
   closeModal();
   renderGrid();
   renderPreview();
+  persistState();
 }
 
 // ===== FORM HELPERS =====
@@ -754,7 +918,8 @@ function buildForm(section) {
           '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+
           (parseInt(p['R1']||p['r1'])||0)+'/'+(parseInt(p['R2']||p['r2'])||0)+'/'+
           (parseInt(p['F1']||p['f1'])||0)+'/'+(parseInt(p['F2']||p['f2'])||0)+'/'+
-          (parseInt(p['F3']||p['f3'])||0)+'/'+(parseInt(p['F4']||p['f4'])||0));
+          (parseInt(p['F3']||p['f3'])||0)+'/'+(parseInt(p['F4']||p['f4'])||0),
+          {bathcopied: val('bathcopied')});
       } else {
         var bp3=ival('bathprod'), tnk=ival('tanker');
         var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
@@ -790,7 +955,8 @@ function buildForm(section) {
         saveSection('Warehouse',
           '\u2022 RAP/SAP/EBB/EAP - '+gp('Rap')+'/'+gp('Sap')+'/'+gp('Ebb')+'/'+gp('Eap')+'\n'+
           '\u2022 Sent RA/EB - '+gp('Ra')+'/'+gp('Eb')+'\n'+
-          '\u2022 Rec SA/SB - '+gp('Sa')+'/'+gp('Sb'));
+          '\u2022 Rec SA/SB - '+gp('Sa')+'/'+gp('Sb'),
+          {whcopied: val('whcopied')});
       } else {
         saveSection('Warehouse',
           '\u2022 RAP/SAP/EBB/EAP - '+val('whstock')+'\n'+
@@ -802,7 +968,7 @@ function buildForm(section) {
   }
 
   else if (section === 'Breakdowns') {
-    var alreadyFilled = S.data['Breakdowns'] !== null;
+    var alreadyFilled = S.data['Breakdowns'] !== null && S.data['Breakdowns'] !== undefined;
     var appendHtml = alreadyFilled
       ? '<div class="info-box" style="white-space:pre-wrap;max-height:90px;overflow-y:auto;margin-bottom:10px;"><b>Existing:</b>\n'+S.data['Breakdowns']+'</div>'+
         tabs('bdmode',['Append','Overwrite'])
@@ -847,7 +1013,7 @@ function buildForm(section) {
       }
       var modeBtn = document.querySelector('[data-tg="bdmode"].active');
       var isAppend = alreadyFilled && modeBtn && modeBtn.getAttribute('data-ti') === '0';
-      saveSection('Breakdowns', isAppend ? S.data['Breakdowns']+'\n'+processed : processed);
+      saveSection('Breakdowns', isAppend ? S.data['Breakdowns']+'\n'+processed : processed, {bd1: val('bd1'), bd2: val('bd2')});
     }));
   }
 
@@ -861,7 +1027,7 @@ function buildForm(section) {
       var modeBtn = document.querySelector('[data-tg="sbhmode"].active');
       var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
       var combined = sbhExisting ? (isOverwrite ? (newVal || sbhExisting) : (newVal ? sbhExisting+'\n'+newVal : sbhExisting)) : newVal;
-      saveSection('SBH & Mill', combined);
+      saveSection('SBH & Mill', combined, {sbh_data: val('sbh_data')});
     }));
   }
 
@@ -875,7 +1041,7 @@ function buildForm(section) {
       var modeBtn = document.querySelector('[data-tg="rmtmode"].active');
       var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
       var combined = rmtExisting ? (isOverwrite ? (newVal || rmtExisting) : (newVal ? rmtExisting+'\n'+newVal : rmtExisting)) : newVal;
-      saveSection('RMT', combined);
+      saveSection('RMT', combined, {rmt_data: val('rmt_data')});
     }));
   }
 
@@ -939,7 +1105,11 @@ function generateReport() {
   goPhase(3);
 }
 
-goPhase(1);
+// Check for active database session on start
+var restored = await checkAndRestoreState();
+if (!restored) {
+  goPhase(1);
+}
 
 }); // end DOMContentLoaded
 </script>
