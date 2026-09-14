@@ -54,8 +54,8 @@ textarea{resize:vertical;min-height:80px;}
 .tab{padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;}
 .tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
 .hidden{display:none!important;}
-#phase-prev-report,#phase-section-select,#phase-report-out{display:none;}
-#phase-prev-report.active,#phase-section-select.active,#phase-report-out.active{display:block;}
+#phase-prev-report,#phase-section-select,#phase-report-out,#phase-contributor{display:none;}
+#phase-prev-report.active,#phase-section-select.active,#phase-report-out.active,#phase-contributor.active{display:block;}
 
 .copy-wrap{position:relative;display:inline-flex;}
 .copy-flash{position:absolute;top:-30px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .3s;}
@@ -76,6 +76,7 @@ textarea{resize:vertical;min-height:80px;}
 .spinner{width:30px;height:30px;border:3px solid var(--surface2);border-top-color:var(--accent2);border-radius:50%;animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .resume-banner { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--green); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+.share-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -87,6 +88,7 @@ textarea{resize:vertical;min-height:80px;}
 <div class="app">
   <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:5%"></div></div>
 
+  <!-- PHASE 1: PASTE PREVIOUS (MASTER ONLY) -->
   <div id="phase-prev-report" class="active">
     <div id="resume-container"></div>
     <div class="card">
@@ -99,9 +101,13 @@ textarea{resize:vertical;min-height:80px;}
     </div>
   </div>
 
+  <!-- PHASE 2: SECTION DASHBOARD -->
   <div id="phase-section-select">
     <div class="card">
-      <div class="card-title">Step 2 - Fill Sections</div>
+      <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Step 2 - Fill Sections</span>
+        <button class="btn btn-secondary btn-sm" id="open-share-btn">🔗 Share Entry Links</button>
+      </div>
       <div class="info-box" id="shift-info-box">Loading...</div>
       
       <!-- AI Zone -->
@@ -114,7 +120,6 @@ textarea{resize:vertical;min-height:80px;}
         <div class="ai-zone-title">&#10024; AI Auto-Extract</div>
         
         <div class="upload-grid">
-          <!-- Box 1: Production -->
           <div class="upload-box">
             <label>1. PRODUCTION SHEET</label>
             <input type="file" id="prod-img" accept="image/*">
@@ -123,7 +128,6 @@ textarea{resize:vertical;min-height:80px;}
                <button class="btn btn-danger btn-sm" id="prod-clear">X Remove</button>
             </div>
           </div>
-          <!-- Box 2: Breakdown -->
           <div class="upload-box">
             <label>2. SAP BREAKDOWN</label>
             <input type="file" id="bd-img" accept="image/*">
@@ -140,6 +144,7 @@ textarea{resize:vertical;min-height:80px;}
       <div class="section-grid" id="section-grid"></div>
       <div class="btn-row">
         <button class="btn btn-success" id="gen-btn">&#9889; GENERATE REPORT</button>
+        <button class="btn btn-secondary" id="sync-cloud-btn">🔄 Cloud Sync</button>
         <button class="btn btn-secondary" id="back-btn">&#8592; BACK</button>
       </div>
     </div>
@@ -153,6 +158,7 @@ textarea{resize:vertical;min-height:80px;}
     </div>
   </div>
 
+  <!-- PHASE 3: REPORT OUTPUT -->
   <div id="phase-report-out">
     <div class="card">
       <div class="card-title">Step 3 - Generated Report</div>
@@ -167,24 +173,78 @@ textarea{resize:vertical;min-height:80px;}
       </div>
     </div>
   </div>
+
+  <!-- PHASE 4: CONTRIBUTOR SCOPED VIEW -->
+  <div id="phase-contributor">
+    <div class="card">
+      <div class="card-title" id="contributor-title">Direct Section Entry</div>
+      <div class="info-box" id="contributor-info-box">Loading...</div>
+      <div id="contributor-form-wrap"></div>
+    </div>
+  </div>
 </div>
 
+<!-- MAIN MODAL -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal" id="modal-body"></div>
+</div>
+
+<!-- SHARE LINKS MODAL -->
+<div class="modal-overlay" id="share-modal-overlay">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-title">🔗 Scoped Section &amp; Subsection Links</div>
+    <div class="info-box">Click Copy Link to share it with the person responsible for that section.</div>
+    <div id="share-links-list" style="max-height:60vh; overflow-y:auto;"></div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn btn-secondary" id="close-share-modal">CLOSE</button>
+    </div>
+  </div>
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded", async function() {
 
 // ==============================================================================
-// ⚠️ REPLACE WITH YOUR ACTUAL GOOGLE APPS SCRIPT URL ⚠️
-const gasWebAppUrl = "https://script.google.com/macros/s/AKfycbzZCzqEqlzECGkfI8hCjucAGjdMbq9IPSWkfcDZy0ocOe1zERIEXBJv_a9WZaC8xEbbPw/exec";
+// ⚠️ PASTE YOUR BRAND NEW STANDALONE APPS SCRIPT WEB APP URL HERE ⚠️
+const gasWebAppUrl = "https://script.google.com/macros/s/AKfycbz5gh6SjAC3G9ukXJl-PZAk43J4V9I4nSJ_ftOUJWoPVRatrEM-lbNdorcVxs2ppvk3/exec";
 // ==============================================================================
 
 var SECTIONS = [
   'Compliance','ARS-2 Production','ARS-3 Production','Total RA Cumulative',
   'Bath Handling','Warehouse','Breakdowns','SBH & Mill','RMT','Manpower','Vehicles','Furnace'
 ];
+
+var LINK_CATALOG = [
+  { label: 'ARS-2 Production (Complete Section)', sec: 'ars2' },
+  { label: '↳ Sub: ARS-2 LUL Only', sec: 'ars2', sub: 'lul' },
+  { label: '↳ Sub: ARS-2 AB Only', sec: 'ars2', sub: 'ab' },
+  { label: '↳ Sub: ARS-2 BP Only', sec: 'ars2', sub: 'bp' },
+  { label: '↳ Sub: ARS-2 RR/RH/SS/RS Only', sec: 'ars2', sub: 'rr' },
+  { label: '↳ Sub: ARS-2 Rodded Anodes (CM) Only', sec: 'ars2', sub: 'ra' },
+  { label: 'ARS-3 Production (Complete Section)', sec: 'ars3' },
+  { label: 'Bath Handling (Complete Section)', sec: 'bath' },
+  { label: 'Warehouse (Complete Section)', sec: 'wh' },
+  { label: 'Breakdowns (Log)', sec: 'bd' },
+  { label: 'SBH & Mill', sec: 'sbh' },
+  { label: 'RMT', sec: 'rmt' },
+  { label: 'Manpower', sec: 'manpower' },
+  { label: 'Vehicles', sec: 'veh' },
+  { label: 'Furnace', sec: 'fur' }
+];
+
+var SECTION_KEYS = {
+  'ars2': 'ARS-2 Production',
+  'ars3': 'ARS-3 Production',
+  'bath': 'Bath Handling',
+  'wh': 'Warehouse',
+  'bd': 'Breakdowns',
+  'sbh': 'SBH & Mill',
+  'rmt': 'RMT',
+  'manpower': 'Manpower',
+  'veh': 'Vehicles',
+  'fur': 'Furnace',
+  'compliance': 'Compliance'
+};
 
 var S = {
   currentPhase: 1,
@@ -196,6 +256,27 @@ var S = {
   furnaceContent:'', vehicleContent:'',
   data:{}, inputs:{}, ars3RaFtd:0, roddedAnodesCum:0
 };
+
+// URL PARAMETER HANDLING
+const urlParams = new URLSearchParams(window.location.search);
+const targetSecKey = urlParams.get('sec');
+const targetSubKey = urlParams.get('sub');
+const isContributor = !!targetSecKey;
+
+function getAutoDate(){
+  var d = new Date();
+  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
+  var dd = String(d.getDate()).padStart(2,'0');
+  var mm = String(d.getMonth()+1).padStart(2,'0');
+  return dd + '/' + mm + '/' + d.getFullYear();
+}
+
+function getAutoShift(){
+  var h = new Date().getHours();
+  if (h >= 6 && h < 14) return 'A';
+  if (h >= 14 && h < 22) return 'B';
+  return 'C';
+}
 
 // ===== PERSISTENT INDEXEDDB ENGINE =====
 const DB_NAME = 'ARS_Report_DB_GAS';
@@ -221,12 +302,8 @@ async function persistState() {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(serialized, 'current_draft');
-  } catch (err) {
-    console.warn('IndexedDB write error, falling back:', err);
-  }
-  try {
-    localStorage.setItem('ars_report_gas_backup', serialized);
-  } catch (e) {}
+  } catch (err) {}
+  try { localStorage.setItem('ars_report_gas_backup', serialized); } catch (e) {}
 }
 
 async function clearSavedState() {
@@ -234,10 +311,8 @@ async function clearSavedState() {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).delete('current_draft');
-  } catch (e) {}
-  try {
-    localStorage.removeItem('ars_report_gas_backup');
-  } catch (e) {}
+  } catch (err) {}
+  try { localStorage.removeItem('ars_report_gas_backup'); } catch (e) {}
 }
 
 async function checkAndRestoreState() {
@@ -253,11 +328,8 @@ async function checkAndRestoreState() {
   } catch (e) {}
 
   if (!raw) {
-    try {
-      raw = localStorage.getItem('ars_report_gas_backup');
-    } catch (e) {}
+    try { raw = localStorage.getItem('ars_report_gas_backup'); } catch (e) {}
   }
-
   if (!raw) return false;
 
   try {
@@ -289,7 +361,6 @@ async function checkAndRestoreState() {
     }
     return false;
   } catch (err) {
-    console.error('State restore error:', err);
     return false;
   }
 }
@@ -314,7 +385,6 @@ function renderResumeBanner() {
   }
 }
 
-// Live typing tracking
 el('prev-report-input').addEventListener('input', function() {
   S.prevReportRaw = this.value;
   persistState();
@@ -330,7 +400,6 @@ el('modal-body').addEventListener('input', function(e) {
   }
 });
 
-// ===== UTILS =====
 function el(id) { return document.getElementById(id); }
 function val(id) { var e = el(id); return e ? e.value.trim() : ''; }
 function ival(id) { var v = parseInt(val(id)); return isNaN(v) ? 0 : v; }
@@ -387,14 +456,126 @@ function restoreInputs(section, ids) {
 
 function goPhase(n) {
   S.currentPhase = n;
-  ['phase-prev-report','phase-section-select','phase-report-out'].forEach(function(id,i){
+  ['phase-prev-report','phase-section-select','phase-report-out','phase-contributor'].forEach(function(id,i){
     el(id).classList.toggle('active', i === n-1);
   });
-  el('prog-fill').style.width = (n===1?5:n===2?50:100)+'%';
+  el('prog-fill').style.width = (n===1?5:n===2?50:n===3?100:60)+'%';
   persistState();
 }
 
-//// ===== PARSE BUTTON =====
+// ===== CLOUD SYNC & SAVE API =====
+async function syncFromCloud() {
+  if (!S.nextDate || !S.nextShift) return;
+  try {
+    const res = await fetch(`${gasWebAppUrl}?action=getShiftReportData&date=${encodeURIComponent(S.nextDate)}&shift=${encodeURIComponent(S.nextShift)}`);
+    const cloud = await res.json();
+    
+    if (cloud && cloud.data) {
+      // 1. Merge raw inputs from all contributors
+      Object.keys(cloud.inputs || {}).forEach(sec => {
+        S.inputs[sec] = Object.assign(S.inputs[sec] || {}, cloud.inputs[sec]);
+      });
+
+      // 2. Merge full text values
+      Object.keys(cloud.data).forEach(sec => {
+        if (cloud.data[sec]) S.data[sec] = cloud.data[sec];
+      });
+
+      // 3. Re-evaluate ARS-2 if subsections were updated by contributors
+      if (S.inputs['ARS-2 Production']) {
+        var curInp = S.inputs['ARS-2 Production'];
+        var raRaw = curInp['ra'] || '', roddedAnodes = 0, cmDisplay = '';
+        if (raRaw.indexOf(',') !== -1) {
+          var parts = raRaw.split(',').map(v => parseInt(v.trim()) || 0);
+          roddedAnodes = parts.reduce((a,b) => a+b, 0);
+          cmDisplay = roddedAnodes + '(' + parts.join('/') + ')';
+        } else {
+          roddedAnodes = parseInt(raRaw) || 0;
+          cmDisplay = String(roddedAnodes);
+        }
+        var bp = parseInt(curInp['bp']) || 0;
+        S.roddedAnodesCum = S.nextShift === 'C' ? roddedAnodes : ((S.prevRoddedAnode || 0) + roddedAnodes);
+
+        var lulRaw = (curInp['lul'] || '').trim();
+        var lulDisplay = lulRaw;
+        var slashIdx = lulRaw.indexOf('/');
+        if (slashIdx !== -1) {
+          var lulTarget = lulRaw.substring(0, slashIdx).trim();
+          var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
+          var lulParts = lulActualRaw.split(',');
+          if (lulParts.length >= 2) {
+            var v1str = lulParts[0].trim(), v2str = lulParts[1].trim();
+            var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
+            var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
+            lulDisplay = lulTarget + '/' + (v1 + v2) + '(' + v1 + '/' + v2 + ')';
+          }
+        }
+
+        S.data['ARS-2 Production'] = 
+          '\u2022 *LUL* Production (Target/Actual)- ' + lulDisplay + '\n' +
+          '\u2022Rodded anodes (Cumulative)- ' + S.roddedAnodesCum + '(M)\n' +
+          '\u2022Rods hooked- 0\n' +
+          '\u2022 *CM*/AB/BP- ' + cmDisplay + '/' + (curInp['ab'] || '') + '/' + bp + '\n' +
+          '\u2022RR/RH/SS/RS- ' + (curInp['rr'] || '') + '\n' +
+          '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
+      }
+
+      // 4. Re-evaluate ARS-3 if subsections were updated
+      if (S.inputs['ARS-3 Production']) {
+        var inp3 = S.inputs['ARS-3 Production'];
+        var fra = parseInt(inp3['ars3ra']) || 0;
+        var fba = parseInt(inp3['ars3ba']) || 0;
+        var ars3saRaw = String(inp3['ars3sa'] || '').trim();
+        var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : (parseInt(ars3saRaw) || 0);
+        var dra = S.nextShift === 'C' ? fra : ((S.prevArs3Ra || 0) + fra);
+        var dsa = S.nextShift === 'C' ? fsa : ((S.prevArs3Sa || 0) + fsa);
+        var dba = S.nextShift === 'C' ? fba : ((S.prevArs3Ba || 0) + fba);
+        S.ars3RaFtd = dra;
+
+        S.data['ARS-3 Production'] = 
+          '*SHIFT: C+A+B*\n' +
+          'RA production(FTS/FTD): ' + fra + '/' + dra + '\n' +
+          'SA processed: (FTS/FTD)- ' + fsa + '/' + dsa + '\n' +
+          'BA received(sets):(FTS/FTD)- ' + fba + '/' + dba;
+      }
+
+      // 5. Re-evaluate Total RA Cumulative
+      var totalRA = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
+      S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)=' + (S.roddedAnodesCum || 0) + '+' + (S.ars3RaFtd || 0) + '=' + totalRA;
+
+      // 6. Update UI buttons and preview box
+      renderGrid();
+      renderPreview();
+      persistState();
+    }
+  } catch(e) {
+    console.warn("Cloud sync error:", e);
+  }
+}
+
+async function pushSectionToCloud(section, textVal, rawInp) {
+  try {
+    await fetch(gasWebAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'saveShiftReportSection',
+        data: {
+          date: S.nextDate,
+          shift: S.nextShift,
+          section: section,
+          value: textVal,
+          rawInputs: rawInp,
+          enteredBy: isContributor ? 'Direct Link (' + (targetSubKey || targetSecKey) + ')' : 'Incharge'
+        }
+      })
+    });
+  } catch(e) {
+    console.warn("Could not post to cloud:", e);
+  }
+}
+
+// ===== PARSE BUTTON =====
 el('parse-btn').addEventListener('click', function() {
   var txt = el('prev-report-input').value.trim();
   if (!txt) { alert('Please paste the previous shift report.'); return; }
@@ -454,6 +635,7 @@ el('parse-btn').addEventListener('click', function() {
 
   renderGrid();
   renderPreview();
+  syncFromCloud();
   goPhase(2);
 });
 
@@ -462,10 +644,40 @@ el('back-btn').addEventListener('click', function(){
   goPhase(1); 
 });
 
-el('gen-btn').addEventListener('click', generateReport);
+el('sync-cloud-btn').addEventListener('click', async function(){
+  this.textContent = '⏳ Syncing...';
+  await syncFromCloud();
+  this.textContent = '🔄 Cloud Sync';
+  alert('Synced latest entries from cloud.');
+});
+
+el('gen-btn').addEventListener('click', async function() {
+  this.textContent = '⏳ Preparing...';
+  await syncFromCloud();
+  this.textContent = '⚡ GENERATE REPORT';
+  generateReport();
+});
 el('edit-btn').addEventListener('click', function(){ goPhase(2); renderPreview(); });
 el('reset-btn').addEventListener('click', async function(){
-  if (confirm("Start a new report? This will erase current progress.")) {
+  if (confirm("Start a new report? This will erase current progress for this shift.")) {
+    
+    // 1. Delete rows for ONLY this date & shift from Google Sheet
+    if (S.nextDate && S.nextShift) {
+      try {
+        await fetch(gasWebAppUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'resetShiftData',
+            data: { date: S.nextDate, shift: S.nextShift }
+          })
+        });
+      } catch (err) {
+        console.warn("Could not clear Google Sheet:", err);
+      }
+    }
+
+    // 2. Clear local browser storage
     await clearSavedState();
     S.prevReportRaw = '';
     S.data = {};
@@ -496,12 +708,16 @@ function fallbackCopy(txt) {
   try { document.execCommand('copy'); showCopyFlash(); } catch(e) { alert('Please select and copy the text manually.'); }
   document.body.removeChild(ta);
 }
+
 function showCopyFlash() {
   el('copy-flash').classList.add('show');
   setTimeout(function(){ el('copy-flash').classList.remove('show'); }, 1800);
 }
 
 el('modal-overlay').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+el('share-modal-overlay').addEventListener('click', function(e){ if(e.target===this) el('share-modal-overlay').classList.remove('open'); });
+el('close-share-modal').addEventListener('click', function(){ el('share-modal-overlay').classList.remove('open'); });
+
 el('preview-toggle-btn').addEventListener('click', function(){
   var pc = el('preview-content');
   var hidden = pc.style.display === 'none';
@@ -509,7 +725,7 @@ el('preview-toggle-btn').addEventListener('click', function(){
   this.textContent = hidden ? 'HIDE' : 'SHOW';
 });
 
-//// ===== AI IMAGE UPLOAD HANDLERS =====
+// ===== AI EXTRACTION HANDLERS =====
 function setupImageUpload(inputId, previewId, thumbId, clearId) {
     var input = el(inputId);
     input.addEventListener('change', function() {
@@ -582,7 +798,7 @@ el('ai-process-btn').addEventListener('click', async function(){
             alert("AI Processing Failed:\n\n" + (result.error || "Unknown error occurred."));
         }
     } catch(error) {
-        alert("Network Error: Could not connect to Google Apps Script. Check your Web App URL.\n" + error.message);
+        alert("Could not process with AI: " + error.message);
     } finally {
         el('ai-loader').classList.remove('active');
     }
@@ -658,7 +874,7 @@ function autoFillFromAI(ai) {
   }
 }
 
-//// ===== GRID & PREVIEW =====
+// ===== GRID & PREVIEW =====
 function renderGrid() {
   var grid = el('section-grid');
   grid.innerHTML = '';
@@ -689,7 +905,7 @@ function renderPreview() {
   el('preview-content').textContent = text;
 }
 
-// ===== MODAL =====
+// ===== MODAL FIELDS CONFIG =====
 var SECTION_FIELDS = {
   'Compliance':        ['nm','uauc','permits','m2notif'],
   'ARS-2 Production':  ['lul','ab','bp','rr','ra'],
@@ -732,13 +948,14 @@ function saveSection(section, value, rawInputs) {
   var t = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
   S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)='+(S.roddedAnodesCum || 0)+'+'+(S.ars3RaFtd || 0)+'='+t;
 
+  pushSectionToCloud(section, value, S.inputs[section]);
+
   closeModal();
   renderGrid();
   renderPreview();
   persistState();
 }
 
-// ===== FORM HELPERS =====
 function fld(id, lbl, type, ph) {
   return '<label>' + lbl + '</label><input type="' + (type||'text') + '" id="' + id + '" placeholder="' + (ph||'') + '">';
 }
@@ -1094,7 +1311,129 @@ function buildForm(section) {
   return wrap;
 }
 
-//// ===== GENERATE =====
+// ===== CONTRIBUTOR ROUTING & SUBSECTION MERGER =====
+async function setupContributorView(secKey, subKey) {
+  const fullSec = SECTION_KEYS[secKey];
+  if (!fullSec) {
+    alert("Invalid section link.");
+    return;
+  }
+
+  S.nextDate = getAutoDate();
+  S.nextShift = getAutoShift();
+  el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
+
+  goPhase(4);
+  
+  el('contributor-title').textContent = (subKey ? subKey.toUpperCase() + ' Entry (' + fullSec + ')' : fullSec);
+  el('contributor-info-box').innerHTML = `Date: <b>${S.nextDate}</b> | Shift: <b>${S.nextShift}</b> | Connecting to database...`;
+
+  await syncFromCloud();
+  el('contributor-info-box').innerHTML = `Date: <b>${S.nextDate}</b> | Shift: <b>${S.nextShift}</b> | Ready to fill.`;
+
+  var wrap = el('contributor-form-wrap');
+  wrap.innerHTML = '';
+
+  if (secKey === 'ars2' && subKey) {
+    var savedSub = (S.inputs['ARS-2 Production'] || {})[subKey] || '';
+    var subLabels = {
+      'lul': 'LUL Production (Target/Actual) - e.g. 800/800 or 100p, 100p',
+      'ab': 'AB count',
+      'bp': 'BP (number)',
+      'rr': 'RR/RH/SS/RS - e.g. 2/1/0/0',
+      'ra': 'Rodded Anodes (CM1, CM2 or single)'
+    };
+    wrap.innerHTML = `
+      <label>${subLabels[subKey] || subKey.toUpperCase()}</label>
+      <input type="${subKey==='bp'?'number':'text'}" id="sub_${subKey}" value="${savedSub}">
+      <button class="btn btn-primary" id="sub-save-btn" style="margin-top:12px;">SAVE SUBSECTION</button>
+      <div id="sub-msg" style="font-size:12px; margin-top:8px;"></div>
+    `;
+
+    el('sub-save-btn').addEventListener('click', async function(){
+      var newVal = el('sub_' + subKey).value.trim();
+      var curInp = S.inputs['ARS-2 Production'] || {};
+      curInp[subKey] = newVal;
+      S.inputs['ARS-2 Production'] = curInp;
+
+      // Merge ARS2 Production numbers
+      var raRaw = curInp['ra'] || '', roddedAnodes = 0, cmDisplay = '';
+      if (raRaw.indexOf(',') !== -1) {
+        var parts = raRaw.split(',').map(v => parseInt(v.trim()) || 0);
+        roddedAnodes = parts.reduce((a,b)=>a+b, 0);
+        cmDisplay = roddedAnodes + '(' + parts.join('/') + ')';
+      } else {
+        roddedAnodes = parseInt(raRaw) || 0;
+        cmDisplay = String(roddedAnodes);
+      }
+      var bp = parseInt(curInp['bp']) || 0;
+      var roddedCum = S.nextShift === 'C' ? roddedAnodes : ((S.prevRoddedAnode || 0) + roddedAnodes);
+
+      var lulRaw = (curInp['lul'] || '').trim();
+      var lulDisplay = lulRaw;
+      var slashIdx = lulRaw.indexOf('/');
+      if (slashIdx !== -1) {
+        var lulTarget = lulRaw.substring(0, slashIdx).trim();
+        var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
+        var lulParts = lulActualRaw.split(',');
+        if (lulParts.length >= 2) {
+          var v1str = lulParts[0].trim(), v2str = lulParts[1].trim();
+          var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
+          var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
+          lulDisplay = lulTarget + '/' + (v1 + v2) + '(' + v1 + '/' + v2 + ')';
+        }
+      }
+
+      var textVal = '\u2022 *LUL* Production (Target/Actual)- ' + lulDisplay + '\n' +
+                    '\u2022Rodded anodes (Cumulative)- ' + roddedCum + '(M)\n' +
+                    '\u2022Rods hooked- 0\n' +
+                    '\u2022 *CM*/AB/BP- ' + cmDisplay + '/' + (curInp['ab'] || '') + '/' + bp + '\n' +
+                    '\u2022RR/RH/SS/RS- ' + (curInp['rr'] || '') + '\n' +
+                    '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
+
+      el('sub-msg').textContent = 'Saving to database...';
+      await pushSectionToCloud('ARS-2 Production', textVal, curInp);
+      el('sub-msg').innerHTML = '<span style="color:var(--green)">✓ Saved successfully! You can close this window.</span>';
+    });
+
+  } else {
+    wrap.appendChild(buildForm(fullSec));
+    if (SECTION_FIELDS[fullSec]) restoreInputs(fullSec, SECTION_FIELDS[fullSec]);
+    var cancelBtns = wrap.querySelectorAll('.btn-secondary');
+    cancelBtns.forEach(btn => btn.style.display = 'none');
+  }
+}
+
+// ===== SHARE LINKS MODAL RENDER =====
+el('open-share-btn').addEventListener('click', function() {
+  var list = el('share-links-list');
+  list.innerHTML = '';
+  var base = window.location.href.split('?')[0];
+
+  LINK_CATALOG.forEach(function(item){
+    var link = base + '?sec=' + item.sec + (item.sub ? '&sub=' + item.sub : '');
+    var row = document.createElement('div');
+    row.className = 'share-row';
+    row.innerHTML = `
+      <div>
+        <b style="color:var(--text);">${item.label}</b>
+        <div style="font-size:11px; color:var(--muted); font-family:monospace; margin-top:2px;">${link}</div>
+      </div>
+      <button class="btn btn-secondary btn-sm copy-link-btn" style="white-space:nowrap;">Copy Link</button>
+    `;
+    row.querySelector('.copy-link-btn').addEventListener('click', function(){
+      navigator.clipboard.writeText(link).then(()=>{
+        this.textContent = 'Copied!';
+        setTimeout(()=> this.textContent = 'Copy Link', 1500);
+      });
+    });
+    list.appendChild(row);
+  });
+
+  el('share-modal-overlay').classList.add('open');
+});
+
+// ===== GENERATE =====
 function generateReport() {
   var report = '\n*Date:-'+S.nextDate+'*\n*Shift:-'+S.nextShift+'*\n\n';
   SECTIONS.forEach(function(sec){
@@ -1105,13 +1444,17 @@ function generateReport() {
   goPhase(3);
 }
 
-// Check for active database session on start
-var restored = await checkAndRestoreState();
-if (!restored) {
-  goPhase(1);
+// Boot check
+if (isContributor) {
+  setupContributorView(targetSecKey, targetSubKey);
+} else {
+  var restored = await checkAndRestoreState();
+  if (!restored) {
+    goPhase(1);
+  }
 }
 
-}); // end DOMContentLoaded
+});
 </script>
 </body>
 </html>
