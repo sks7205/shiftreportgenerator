@@ -76,7 +76,6 @@ textarea{resize:vertical;min-height:80px;}
 .spinner{width:30px;height:30px;border:3px solid var(--surface2);border-top-color:var(--accent2);border-radius:50%;animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .resume-banner { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--green); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
-.share-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -189,14 +188,81 @@ textarea{resize:vertical;min-height:80px;}
   <div class="modal" id="modal-body"></div>
 </div>
 
-<!-- SHARE LINKS MODAL -->
+<!-- DYNAMIC LINK GENERATOR MODAL -->
 <div class="modal-overlay" id="share-modal-overlay">
-  <div class="modal" style="max-width:600px;">
-    <div class="modal-title">🔗 Scoped Section &amp; Subsection Links</div>
-    <div class="info-box">Click Copy Link to share it with the person responsible for that section.</div>
-    <div id="share-links-list" style="max-height:60vh; overflow-y:auto;"></div>
-    <div class="btn-row" style="margin-top:16px;">
-      <button class="btn btn-secondary" id="close-share-modal">CLOSE</button>
+  <div class="modal" style="max-width:580px;">
+    <div class="modal-title">🔗 Custom Contributor Link Generator</div>
+    <div class="info-box">Select any combination of sections or ARS-2 subsections to generate a combined entry link.</div>
+    
+    <div id="link-builder-form" style="max-height:55vh; overflow-y:auto; padding-right:6px;">
+      <!-- ARS-2 Group -->
+      <div style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:12px; margin-bottom:10px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--accent); font-weight:700; margin:0;">
+          <input type="checkbox" id="chk-sec-ars2" value="ars2"> ARS-2 PRODUCTION (WHOLE SECTION)
+        </label>
+        <div id="ars2-sub-group" style="margin-left:24px; margin-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; text-transform:none; cursor:pointer;">
+            <input type="checkbox" class="ars2-sub-chk" value="lul"> LUL Production
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; text-transform:none; cursor:pointer;">
+            <input type="checkbox" class="ars2-sub-chk" value="ab"> AB Count
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; text-transform:none; cursor:pointer;">
+            <input type="checkbox" class="ars2-sub-chk" value="bp"> BP Count
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; text-transform:none; cursor:pointer;">
+            <input type="checkbox" class="ars2-sub-chk" value="rr"> RR / RH / SS / RS
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; text-transform:none; cursor:pointer;">
+            <input type="checkbox" class="ars2-sub-chk" value="ra"> Rodded Anodes (CM)
+          </label>
+        </div>
+      </div>
+
+      <!-- Other Main Sections Grid -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="ars3"> ARS-3 Production
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="bath"> Bath Handling
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="wh"> Warehouse
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="bd"> Breakdowns
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="sbh"> SBH &amp; Mill
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="rmt"> RMT
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="manpower"> Manpower
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="veh"> Vehicles
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="fur"> Furnace
+        </label>
+        <label style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+          <input type="checkbox" class="main-sec-chk" value="compliance"> Compliance
+        </label>
+      </div>
+    </div>
+
+    <!-- Output Box & Actions -->
+    <div style="margin-top:14px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px;">
+      <label style="font-size:11px;">Generated Link</label>
+      <input type="text" id="custom-link-output" readonly style="margin-bottom:8px; color:var(--accent2); background:transparent; border:none; padding:0; cursor:text;" placeholder="Select sections or ARS-2 subsections above...">
+      <div class="btn-row" style="margin:0;">
+        <button class="btn btn-primary btn-sm" id="copy-custom-link-btn">📋 COPY LINK</button>
+        <button class="btn btn-secondary btn-sm" id="reset-selection-btn">CLEAR ALL</button>
+        <button class="btn btn-secondary btn-sm" id="close-share-modal" style="margin-left:auto;">CLOSE</button>
+      </div>
     </div>
   </div>
 </div>
@@ -212,24 +278,6 @@ const gasWebAppUrl = "https://script.google.com/macros/s/AKfycbz5gh6SjAC3G9ukXJl
 var SECTIONS = [
   'Compliance','ARS-2 Production','ARS-3 Production','Total RA Cumulative',
   'Bath Handling','Warehouse','Breakdowns','SBH & Mill','RMT','Manpower','Vehicles','Furnace'
-];
-
-var LINK_CATALOG = [
-  { label: 'ARS-2 Production (Complete Section)', sec: 'ars2' },
-  { label: '↳ Sub: ARS-2 LUL Only', sec: 'ars2', sub: 'lul' },
-  { label: '↳ Sub: ARS-2 AB Only', sec: 'ars2', sub: 'ab' },
-  { label: '↳ Sub: ARS-2 BP Only', sec: 'ars2', sub: 'bp' },
-  { label: '↳ Sub: ARS-2 RR/RH/SS/RS Only', sec: 'ars2', sub: 'rr' },
-  { label: '↳ Sub: ARS-2 Rodded Anodes (CM) Only', sec: 'ars2', sub: 'ra' },
-  { label: 'ARS-3 Production (Complete Section)', sec: 'ars3' },
-  { label: 'Bath Handling (Complete Section)', sec: 'bath' },
-  { label: 'Warehouse (Complete Section)', sec: 'wh' },
-  { label: 'Breakdowns (Log)', sec: 'bd' },
-  { label: 'SBH & Mill', sec: 'sbh' },
-  { label: 'RMT', sec: 'rmt' },
-  { label: 'Manpower', sec: 'manpower' },
-  { label: 'Vehicles', sec: 'veh' },
-  { label: 'Furnace', sec: 'fur' }
 ];
 
 var SECTION_KEYS = {
@@ -263,8 +311,14 @@ const targetSecKey = urlParams.get('sec');
 const targetSubKey = urlParams.get('sub');
 const isContributor = !!targetSecKey;
 
-function getAutoDate(){
+function getShiftAdjustedDate() {
   var d = new Date();
+  d.setHours(d.getHours() - 2);
+  return d;
+}
+
+function getAutoDate(){
+  var d = getShiftAdjustedDate();
   if (d.getHours() < 6) d.setDate(d.getDate() - 1);
   var dd = String(d.getDate()).padStart(2,'0');
   var mm = String(d.getMonth()+1).padStart(2,'0');
@@ -272,7 +326,7 @@ function getAutoDate(){
 }
 
 function getAutoShift(){
-  var h = new Date().getHours();
+  var h = getShiftAdjustedDate().getHours();
   if (h >= 6 && h < 14) return 'A';
   if (h >= 14 && h < 22) return 'B';
   return 'C';
@@ -471,17 +525,14 @@ async function syncFromCloud() {
     const cloud = await res.json();
     
     if (cloud && cloud.data) {
-      // 1. Merge raw inputs from all contributors
       Object.keys(cloud.inputs || {}).forEach(sec => {
         S.inputs[sec] = Object.assign(S.inputs[sec] || {}, cloud.inputs[sec]);
       });
 
-      // 2. Merge full text values
       Object.keys(cloud.data).forEach(sec => {
         if (cloud.data[sec]) S.data[sec] = cloud.data[sec];
       });
 
-      // 3. Re-evaluate ARS-2 if subsections were updated by contributors
       if (S.inputs['ARS-2 Production']) {
         var curInp = S.inputs['ARS-2 Production'];
         var raRaw = curInp['ra'] || '', roddedAnodes = 0, cmDisplay = '';
@@ -520,7 +571,6 @@ async function syncFromCloud() {
           '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
       }
 
-      // 4. Re-evaluate ARS-3 if subsections were updated
       if (S.inputs['ARS-3 Production']) {
         var inp3 = S.inputs['ARS-3 Production'];
         var fra = parseInt(inp3['ars3ra']) || 0;
@@ -539,11 +589,9 @@ async function syncFromCloud() {
           'BA received(sets):(FTS/FTD)- ' + fba + '/' + dba;
       }
 
-      // 5. Re-evaluate Total RA Cumulative
       var totalRA = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
       S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)=' + (S.roddedAnodesCum || 0) + '+' + (S.ars3RaFtd || 0) + '=' + totalRA;
 
-      // 6. Update UI buttons and preview box
       renderGrid();
       renderPreview();
       persistState();
@@ -566,7 +614,7 @@ async function pushSectionToCloud(section, textVal, rawInp) {
           section: section,
           value: textVal,
           rawInputs: rawInp,
-          enteredBy: isContributor ? 'Direct Link (' + (targetSubKey || targetSecKey) + ')' : 'Incharge'
+          enteredBy: isContributor ? 'Direct Link' : 'Incharge'
         }
       })
     });
@@ -660,8 +708,6 @@ el('gen-btn').addEventListener('click', async function() {
 el('edit-btn').addEventListener('click', function(){ goPhase(2); renderPreview(); });
 el('reset-btn').addEventListener('click', async function(){
   if (confirm("Start a new report? This will erase current progress for this shift.")) {
-    
-    // 1. Delete rows for ONLY this date & shift from Google Sheet
     if (S.nextDate && S.nextShift) {
       try {
         await fetch(gasWebAppUrl, {
@@ -677,7 +723,6 @@ el('reset-btn').addEventListener('click', async function(){
       }
     }
 
-    // 2. Clear local browser storage
     await clearSavedState();
     S.prevReportRaw = '';
     S.data = {};
@@ -941,14 +986,14 @@ function closeModal() {
   el('modal-overlay').classList.remove('open'); 
 }
 
-function saveSection(section, value, rawInputs) {
+async function saveSection(section, value, rawInputs) {
   S.data[section] = value;
   if (rawInputs) Object.assign(S.inputs[section] = S.inputs[section] || {}, rawInputs);
   
   var t = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
   S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)='+(S.roddedAnodesCum || 0)+'+'+(S.ars3RaFtd || 0)+'='+t;
 
-  pushSectionToCloud(section, value, S.inputs[section]);
+  await pushSectionToCloud(section, value, S.inputs[section]);
 
   closeModal();
   renderGrid();
@@ -1311,126 +1356,234 @@ function buildForm(section) {
   return wrap;
 }
 
-// ===== CONTRIBUTOR ROUTING & SUBSECTION MERGER =====
-async function setupContributorView(secKey, subKey) {
-  const fullSec = SECTION_KEYS[secKey];
-  if (!fullSec) {
-    alert("Invalid section link.");
-    return;
-  }
-
+// ===== CONTRIBUTOR MULTI-SECTION & SUBSECTION ENGINE =====
+async function setupContributorView(rawSecParam, rawSubParam) {
   S.nextDate = getAutoDate();
   S.nextShift = getAutoShift();
   el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
 
   goPhase(4);
-  
-  el('contributor-title').textContent = (subKey ? subKey.toUpperCase() + ' Entry (' + fullSec + ')' : fullSec);
-  el('contributor-info-box').innerHTML = `Date: <b>${S.nextDate}</b> | Shift: <b>${S.nextShift}</b> | Connecting to database...`;
 
+  // Split comma-separated sections
+  var secKeys = (rawSecParam || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  var subKeys = (rawSubParam || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  var titleParts = secKeys.map(function(k) {
+    if (k === 'ars2' && subKeys.length > 0) {
+      return 'ARS-2 (' + subKeys.map(s => s.toUpperCase()).join('/') + ')';
+    }
+    return SECTION_KEYS[k] || k.toUpperCase();
+  });
+  el('contributor-title').textContent = titleParts.join(' + ') || 'Direct Section Entry';
+
+  el('contributor-info-box').innerHTML = `Date: <b>${S.nextDate}</b> | Shift: <b>${S.nextShift}</b> | Connecting to database...`;
   await syncFromCloud();
   el('contributor-info-box').innerHTML = `Date: <b>${S.nextDate}</b> | Shift: <b>${S.nextShift}</b> | Ready to fill.`;
 
   var wrap = el('contributor-form-wrap');
   wrap.innerHTML = '';
 
-  if (secKey === 'ars2' && subKey) {
-    var savedSub = (S.inputs['ARS-2 Production'] || {})[subKey] || '';
-    var subLabels = {
-      'lul': 'LUL Production (Target/Actual) - e.g. 800/800 or 100p, 100p',
-      'ab': 'AB count',
-      'bp': 'BP (number)',
-      'rr': 'RR/RH/SS/RS - e.g. 2/1/0/0',
-      'ra': 'Rodded Anodes (CM1, CM2 or single)'
-    };
-    wrap.innerHTML = `
-      <label>${subLabels[subKey] || subKey.toUpperCase()}</label>
-      <input type="${subKey==='bp'?'number':'text'}" id="sub_${subKey}" value="${savedSub}">
-      <button class="btn btn-primary" id="sub-save-btn" style="margin-top:12px;">SAVE SUBSECTION</button>
-      <div id="sub-msg" style="font-size:12px; margin-top:8px;"></div>
-    `;
+  secKeys.forEach(function(secKey) {
+    var fullSec = SECTION_KEYS[secKey];
+    if (!fullSec) return;
 
-    el('sub-save-btn').addEventListener('click', async function(){
-      var newVal = el('sub_' + subKey).value.trim();
+    var secCard = document.createElement('div');
+    secCard.style.cssText = 'border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:18px; background:var(--surface2);';
+
+    var cardHeader = document.createElement('div');
+    cardHeader.style.cssText = 'color:var(--accent); font-weight:800; text-transform:uppercase; margin-bottom:12px; font-size:14px;';
+    cardHeader.textContent = fullSec + (secKey === 'ars2' && subKeys.length > 0 ? ' [' + subKeys.map(s => s.toUpperCase()).join(', ') + ']' : '');
+    secCard.appendChild(cardHeader);
+
+    // If ARS-2 and specific subsections were passed
+    if (secKey === 'ars2' && subKeys.length > 0) {
       var curInp = S.inputs['ARS-2 Production'] || {};
-      curInp[subKey] = newVal;
-      S.inputs['ARS-2 Production'] = curInp;
+      var subLabels = {
+        'lul': 'LUL Production (Target/Actual) - e.g. 800/800 or 100p, 100p',
+        'ab':  'AB count',
+        'bp':  'BP (number)',
+        'rr':  'RR/RH/SS/RS - e.g. 2/1/0/0',
+        'ra':  'Rodded Anodes (CM1, CM2 or single)'
+      };
 
-      // Merge ARS2 Production numbers
-      var raRaw = curInp['ra'] || '', roddedAnodes = 0, cmDisplay = '';
-      if (raRaw.indexOf(',') !== -1) {
-        var parts = raRaw.split(',').map(v => parseInt(v.trim()) || 0);
-        roddedAnodes = parts.reduce((a,b)=>a+b, 0);
-        cmDisplay = roddedAnodes + '(' + parts.join('/') + ')';
-      } else {
-        roddedAnodes = parseInt(raRaw) || 0;
-        cmDisplay = String(roddedAnodes);
-      }
-      var bp = parseInt(curInp['bp']) || 0;
-      var roddedCum = S.nextShift === 'C' ? roddedAnodes : ((S.prevRoddedAnode || 0) + roddedAnodes);
+      subKeys.forEach(function(k) {
+        var savedVal = curInp[k] || '';
+        var lbl = subLabels[k] || k.toUpperCase();
+        var type = k === 'bp' ? 'number' : 'text';
+        var fieldDiv = document.createElement('div');
+        fieldDiv.innerHTML = `<label style="margin-top:6px;">${lbl}</label>
+                              <input type="${type}" id="sub_${k}" value="${savedVal}" style="margin-bottom:12px;">`;
+        secCard.appendChild(fieldDiv);
+      });
 
-      var lulRaw = (curInp['lul'] || '').trim();
-      var lulDisplay = lulRaw;
-      var slashIdx = lulRaw.indexOf('/');
-      if (slashIdx !== -1) {
-        var lulTarget = lulRaw.substring(0, slashIdx).trim();
-        var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
-        var lulParts = lulActualRaw.split(',');
-        if (lulParts.length >= 2) {
-          var v1str = lulParts[0].trim(), v2str = lulParts[1].trim();
-          var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
-          var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
-          lulDisplay = lulTarget + '/' + (v1 + v2) + '(' + v1 + '/' + v2 + ')';
+      var subSaveBtn = document.createElement('button');
+      subSaveBtn.className = 'btn btn-primary';
+      subSaveBtn.textContent = 'SAVE ARS-2 SUBSECTION(S)';
+      var subMsg = document.createElement('div');
+      subMsg.style.cssText = 'font-size:12px; margin-top:8px;';
+
+      subSaveBtn.addEventListener('click', async function() {
+        subMsg.textContent = 'Saving to database...';
+        var cur = S.inputs['ARS-2 Production'] || {};
+        subKeys.forEach(function(k) {
+          var inputEl = el('sub_' + k);
+          if (inputEl) cur[k] = inputEl.value.trim();
+        });
+        S.inputs['ARS-2 Production'] = cur;
+
+        var raRaw = cur['ra'] || '', roddedAnodes = 0, cmDisplay = '';
+        if (raRaw.indexOf(',') !== -1) {
+          var parts = raRaw.split(',').map(v => parseInt(v.trim()) || 0);
+          roddedAnodes = parts.reduce((a,b)=>a+b, 0);
+          cmDisplay = roddedAnodes + '(' + parts.join('/') + ')';
+        } else {
+          roddedAnodes = parseInt(raRaw) || 0;
+          cmDisplay = String(roddedAnodes);
         }
+        var bp = parseInt(cur['bp']) || 0;
+        var roddedCum = S.nextShift === 'C' ? roddedAnodes : ((S.prevRoddedAnode || 0) + roddedAnodes);
+
+        var lulRaw = (cur['lul'] || '').trim();
+        var lulDisplay = lulRaw;
+        var slashIdx = lulRaw.indexOf('/');
+        if (slashIdx !== -1) {
+          var lulTarget = lulRaw.substring(0, slashIdx).trim();
+          var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
+          var lulParts = lulActualRaw.split(',');
+          if (lulParts.length >= 2) {
+            var v1str = lulParts[0].trim(), v2str = lulParts[1].trim();
+            var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
+            var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
+            lulDisplay = lulTarget + '/' + (v1 + v2) + '(' + v1 + '/' + v2 + ')';
+          }
+        }
+
+        var textVal = '\u2022 *LUL* Production (Target/Actual)- ' + lulDisplay + '\n' +
+                      '\u2022Rodded anodes (Cumulative)- ' + roddedCum + '(M)\n' +
+                      '\u2022Rods hooked- 0\n' +
+                      '\u2022 *CM*/AB/BP- ' + cmDisplay + '/' + (cur['ab'] || '') + '/' + bp + '\n' +
+                      '\u2022RR/RH/SS/RS- ' + (cur['rr'] || '') + '\n' +
+                      '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
+
+        await pushSectionToCloud('ARS-2 Production', textVal, cur);
+        subMsg.innerHTML = '<span style="color:var(--green)">✓ Saved successfully!</span>';
+      });
+
+      secCard.appendChild(subSaveBtn);
+      secCard.appendChild(subMsg);
+
+    } else {
+      // Build full section form
+      var formEl = buildForm(fullSec);
+      secCard.appendChild(formEl);
+      if (SECTION_FIELDS[fullSec]) restoreInputs(fullSec, SECTION_FIELDS[fullSec]);
+      
+      // Remove modal cancel buttons
+      secCard.querySelectorAll('.btn-secondary').forEach(b => b.style.display = 'none');
+
+      // Add feedback element & wire save confirmation to the section's save button
+      var feedbackMsg = document.createElement('div');
+      feedbackMsg.style.cssText = 'font-size:12px; margin-top:8px;';
+      secCard.appendChild(feedbackMsg);
+
+      var saveBtn = secCard.querySelector('.btn-primary');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', async function() {
+          feedbackMsg.innerHTML = '<span style="color:var(--accent2)">Saving to database...</span>';
+          // Wait for saveSection and pushSectionToCloud to finish
+          setTimeout(function() {
+            feedbackMsg.innerHTML = '<span style="color:var(--green)">✓ Saved successfully!</span>';
+          }, 800);
+        });
       }
+    }
 
-      var textVal = '\u2022 *LUL* Production (Target/Actual)- ' + lulDisplay + '\n' +
-                    '\u2022Rodded anodes (Cumulative)- ' + roddedCum + '(M)\n' +
-                    '\u2022Rods hooked- 0\n' +
-                    '\u2022 *CM*/AB/BP- ' + cmDisplay + '/' + (curInp['ab'] || '') + '/' + bp + '\n' +
-                    '\u2022RR/RH/SS/RS- ' + (curInp['rr'] || '') + '\n' +
-                    '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
-
-      el('sub-msg').textContent = 'Saving to database...';
-      await pushSectionToCloud('ARS-2 Production', textVal, curInp);
-      el('sub-msg').innerHTML = '<span style="color:var(--green)">✓ Saved successfully! You can close this window.</span>';
-    });
-
-  } else {
-    wrap.appendChild(buildForm(fullSec));
-    if (SECTION_FIELDS[fullSec]) restoreInputs(fullSec, SECTION_FIELDS[fullSec]);
-    var cancelBtns = wrap.querySelectorAll('.btn-secondary');
-    cancelBtns.forEach(btn => btn.style.display = 'none');
-  }
+    wrap.appendChild(secCard);
+  });
 }
 
-// ===== SHARE LINKS MODAL RENDER =====
-el('open-share-btn').addEventListener('click', function() {
-  var list = el('share-links-list');
-  list.innerHTML = '';
+// ===== DYNAMIC LINK GENERATOR BUILDER =====
+function buildDynamicLink() {
   var base = window.location.href.split('?')[0];
 
-  LINK_CATALOG.forEach(function(item){
-    var link = base + '?sec=' + item.sec + (item.sub ? '&sub=' + item.sub : '');
-    var row = document.createElement('div');
-    row.className = 'share-row';
-    row.innerHTML = `
-      <div>
-        <b style="color:var(--text);">${item.label}</b>
-        <div style="font-size:11px; color:var(--muted); font-family:monospace; margin-top:2px;">${link}</div>
-      </div>
-      <button class="btn btn-secondary btn-sm copy-link-btn" style="white-space:nowrap;">Copy Link</button>
-    `;
-    row.querySelector('.copy-link-btn').addEventListener('click', function(){
-      navigator.clipboard.writeText(link).then(()=>{
-        this.textContent = 'Copied!';
-        setTimeout(()=> this.textContent = 'Copy Link', 1500);
-      });
-    });
-    list.appendChild(row);
+  var ars2Whole = el('chk-sec-ars2').checked;
+  var subCheckboxes = document.querySelectorAll('.ars2-sub-chk:checked');
+  var selectedSubs = Array.from(subCheckboxes).map(c => c.value);
+  
+  var mainSecCheckboxes = document.querySelectorAll('.main-sec-chk:checked');
+  var selectedMainSecs = Array.from(mainSecCheckboxes).map(c => c.value);
+
+  var secList = [];
+
+  // 1. Add ARS-2 if selected (either whole or through subsections)
+  if (ars2Whole || selectedSubs.length > 0) {
+    secList.push('ars2');
+  }
+
+  // 2. Add other checked sections
+  selectedMainSecs.forEach(function(s) {
+    secList.push(s);
   });
 
+  var outputEl = el('custom-link-output');
+
+  if (secList.length === 0) {
+    outputEl.value = '';
+    outputEl.placeholder = 'Select sections or ARS-2 subsections above...';
+    return;
+  }
+
+  var finalUrl = base + '?sec=' + secList.join(',');
+  if (!ars2Whole && selectedSubs.length > 0) {
+    finalUrl += '&sub=' + selectedSubs.join(',');
+  }
+
+  outputEl.value = finalUrl;
+}
+
+el('open-share-btn').addEventListener('click', function() {
+  buildDynamicLink();
   el('share-modal-overlay').classList.add('open');
+});
+
+el('close-share-modal').addEventListener('click', function() {
+  el('share-modal-overlay').classList.remove('open');
+});
+
+// Toggling whole ARS-2 disables the individual ARS-2 sub-checkboxes
+el('chk-sec-ars2').addEventListener('change', function() {
+  var subs = document.querySelectorAll('.ars2-sub-chk');
+  if (this.checked) {
+    subs.forEach(c => { c.checked = false; c.disabled = true; });
+  } else {
+    subs.forEach(c => c.disabled = false);
+  }
+  buildDynamicLink();
+});
+
+// Listen to all checkbox changes to rebuild link in real time
+document.querySelectorAll('.main-sec-chk, .ars2-sub-chk').forEach(function(chk) {
+  chk.addEventListener('change', buildDynamicLink);
+});
+
+el('copy-custom-link-btn').addEventListener('click', function() {
+  var link = el('custom-link-output').value.trim();
+  if (!link) {
+    alert('Please select at least one section or subsection.');
+    return;
+  }
+  navigator.clipboard.writeText(link).then(() => {
+    var originalText = this.textContent;
+    this.textContent = 'COPIED!';
+    setTimeout(() => this.textContent = originalText, 1500);
+  });
+});
+
+el('reset-selection-btn').addEventListener('click', function() {
+  el('chk-sec-ars2').checked = false;
+  document.querySelectorAll('.ars2-sub-chk').forEach(c => { c.checked = false; c.disabled = false; });
+  document.querySelectorAll('.main-sec-chk').forEach(c => c.checked = false);
+  buildDynamicLink();
 });
 
 // ===== GENERATE =====
