@@ -31,13 +31,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Injects the GROQ_API_KEY from GitHub Secrets into index.html prior to deployment
+      - name: Inject Secret into HTML
+        env:
+          GROQ_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          sed -i "s|__GROQ_API_KEY__|$GROQ_KEY|g" index.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           # Upload entire repository
           path: '.'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
