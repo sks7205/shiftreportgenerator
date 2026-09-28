@@ -122,7 +122,7 @@ textarea{resize:vertical;min-height:80px;}
         </div>
 
         <div id="key-config-wrap" style="display:none; background:var(--surface2); padding:10px; border-radius:6px; margin-bottom:12px; border:1px solid var(--border);">
-          <label style="font-size:11px;">Groq API Key (Stored securely on your browser)</label>
+          <label style="font-size:11px;">Groq API Key (Or injected via GitHub Secret)</label>
           <div style="display:flex; gap:8px;">
             <input type="password" id="groq-key-input" placeholder="gsk_..." style="margin-bottom:0;">
             <button class="btn btn-primary btn-sm" id="save-key-btn">Save Key</button>
@@ -337,7 +337,7 @@ function getAutoShift(){
   return 'C';
 }
 
-// ===== PERSISTENT INDEXEDDB / LOCAL ENGINE =====
+// ===== PERSISTENT INDEXEDDB / LOCAL STORAGE ENGINE =====
 const DB_NAME = 'ARS_Report_DB_GAS';
 const STORE_NAME = 'report_state';
 
@@ -599,6 +599,7 @@ el('parse-btn').addEventListener('click', function() {
 
   renderGrid();
   renderPreview();
+  persistState();
   goPhase(2);
 });
 
@@ -662,6 +663,7 @@ el('preview-toggle-btn').addEventListener('click', function(){
 });
 
 // ===== DIRECT CLIENT-SIDE VISION OCR (GROQ API) =====
+const INJECTED_KEY = "__GROQ_API_KEY__";
 const STORED_KEY = localStorage.getItem('ars_groq_api_key') || '';
 if(STORED_KEY) el('groq-key-input').value = STORED_KEY;
 
@@ -743,7 +745,9 @@ function getCompressedBase64(file, maxDimension = 1600, quality = 0.8) {
 el('ai-process-btn').addEventListener('click', async function(){
     const prodInput = el('prod-img');
     const bdInput = el('bd-img');
-    const apiKey = "__GROQ_API_KEY__";
+    
+    // Resolve key: Priority 1. GitHub injected secret, Priority 2. Local storage, Priority 3. Input field
+    let apiKey = (INJECTED_KEY && !INJECTED_KEY.startsWith("__")) ? INJECTED_KEY : (localStorage.getItem('ars_groq_api_key') || el('groq-key-input').value.trim());
 
     if(!apiKey) {
       el('key-config-wrap').style.display = 'block';
@@ -763,7 +767,6 @@ el('ai-process-btn').addEventListener('click', async function(){
         if(prodInput.files.length > 0) base64Array.push(await getCompressedBase64(prodInput.files[0]));
         if(bdInput.files.length > 0) base64Array.push(await getCompressedBase64(bdInput.files[0]));
 
-        // Build messages directly for Groq Vision API
         const contentArray = [
           {
             type: "text",
@@ -809,4 +812,759 @@ Return a STRICT, RAW JSON object:
 
         const data = await response.json();
         const rawContent = data.choices[0].message.content;
-        const cleanJson = rawContent.replace(/```json/g, "").replace(/
+        const cleanJson = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+        const parsed = JSON.parse(cleanJson);
+
+        autoFillFromAI(parsed);
+        alert("Data extracted successfully! Check the filled sections.");
+    } catch(error) {
+        alert("Vision Extraction Failed:\n\n" + error.message);
+    } finally {
+        el('ai-loader').classList.remove('active');
+    }
+});
+
+function autoFillFromAI(ai) {
+  if(ai.breakdowns) {
+    let existing = S.data['Breakdowns'] || '';
+    saveSection('Breakdowns', existing ? existing+'\n'+ai.breakdowns : ai.breakdowns);
+  }
+  if(ai.rmt) {
+    let existing = S.data['RMT'] || '';
+    saveSection('RMT', existing ? existing+'\n'+ai.rmt : ai.rmt);
+  }
+  if(ai.sbh_mill) {
+    let existing = S.data['SBH & Mill'] || '';
+    saveSection('SBH & Mill', existing ? existing+'\n'+ai.sbh_mill : ai.sbh_mill);
+  }
+  
+  let ars2 = ai.ars2 || {};
+  if(ars2.lul || ars2.ab || ars2.bp || ars2.rr) {
+    let rawLul = String(ars2.lul || '').replace(/800\s*\/?\s*/g, '').trim(); 
+    let finalLulVal = rawLul ? ('800/' + rawLul) : '800/';
+
+    let bp = parseInt(ars2.bp) || 0;
+    S.roddedAnodesCum = S.nextShift === 'C' ? 0 : (S.prevRoddedAnode || 0);
+
+    let ars2Str = '\u2022 *LUL* Production (Target/Actual)- '+ finalLulVal +'\n'+
+                  '\u2022Rodded anodes (Cumulative)- '+S.roddedAnodesCum+'(M)\n'+
+                  '\u2022Rods hooked- 0\n'+
+                  '\u2022 *CM*/AB/BP- /'+(ars2.ab || '')+'/'+bp+'\n'+
+                  '\u2022RR/RH/SS/RS- '+(ars2.rr || '')+'\n'+
+                  '\u2022Butt/GS production- '+(bp*0.22).toFixed(0)+' mt';
+                  
+    saveSection('ARS-2 Production', ars2Str, {lul: finalLulVal, ab: ars2.ab||'', bp: ars2.bp||'', rr: ars2.rr||'', ra: ''});
+  }
+  
+  let ars3 = ai.ars3 || {};
+  if(ars3.ars3ra || ars3.ars3sa || ars3.ars3ba) {
+    var fra=parseInt(ars3.ars3ra)||0, fba=parseInt(ars3.ars3ba)||0;
+    var ars3saRaw = String(ars3.ars3sa||'').trim();
+    var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : parseInt(ars3saRaw)||0;
+    var dra=S.nextShift==='C'?fra:S.prevArs3Ra+fra;
+    var dsa=S.nextShift==='C'?fsa:S.prevArs3Sa+fsa;
+    var dba=S.nextShift==='C'?fba:S.prevArs3Ba+fba;
+    S.ars3RaFtd = dra;
+    
+    let ars3Str = '*SHIFT: C+A+B*\n'+
+                  'RA production(FTS/FTD): '+fra+'/'+dra+'\n'+
+                  'SA processed: (FTS/FTD)- '+fsa+'/'+dsa+'\n'+
+                  'BA received(sets):(FTS/FTD)- '+fba+'/'+dba;
+                  
+    saveSection('ARS-3 Production', ars3Str, {ars3ra: ars3.ars3ra||'', ars3sa: ars3.ars3sa||'', ars3ba: ars3.ars3ba||''});
+  }
+
+  let bath = ai.bath || {};
+  if(bath.bathprod || bath.tanker || bath.bathstock) {
+    var bp3=parseInt(bath.bathprod)||0, tnk=parseInt(bath.tanker)||0;
+    var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
+    var bc2=S.nextShift==='C'?bp3:S.prevBathCum+bp3;
+    let bathStr = '\u2022Bath prod- '+bp3+' mt\n\u2022Cumulative bath- '+bc2+' mt\n'+
+                  '\u2022Tanker- '+tnk+' nos\n\u2022Tankers (cumulative)- '+tc2+' nos\n'+
+                  '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+(bath.bathstock || '');
+    saveSection('Bath Handling', bathStr, {bathprod: bath.bathprod||'', tanker: bath.tanker||'', bathstock: bath.bathstock||''});
+  }
+
+  let wh = ai.warehouse || {};
+  if(wh.whstock || wh.whsent || wh.whrcv) {
+    let whStr = '\u2022 RAP/SAP/EBB/EAP - '+(wh.whstock||'')+'\n'+
+                '\u2022 Sent RA/EB - '+(wh.whsent||'')+'\n'+
+                '\u2022 Rec SA/SB - '+(wh.whrcv||'');
+    saveSection('Warehouse', whStr, {whstock: wh.whstock||'', whsent: wh.whsent||'', whrcv: wh.whrcv||''});
+  }
+}
+
+// ===== GRID & PREVIEW =====
+function renderGrid() {
+  var grid = el('section-grid');
+  grid.innerHTML = '';
+  SECTIONS.forEach(function(sec, i) {
+    var btn = document.createElement('button');
+    var isFilled = S.data[sec] !== null && S.data[sec] !== undefined;
+    if (sec === 'Total RA Cumulative') isFilled = false;
+    
+    btn.className = 'section-btn' + (isFilled ? ' filled' : '');
+    btn.innerHTML =
+      '<div class="sec-num">#' + String(i+1).padStart(2,'0') + '</div>' +
+      '<div class="sec-name">' + sec + '</div>' +
+      '<div class="sec-tick" style="' + (isFilled ? 'display:block;' : 'display:none;') + '">&#10004; filled</div>';
+    btn.addEventListener('click', (function(s){ return function(){ openModal(s); }; })(sec));
+    grid.appendChild(btn);
+  });
+}
+
+function renderPreview() {
+  var filled = SECTIONS.filter(function(s){ return S.data[s] !== null && S.data[s] !== undefined; });
+  var card = el('preview-card');
+  if (filled.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  var text = '*Date:-' + S.nextDate + '*\n*Shift:-' + S.nextShift + '*\n\n';
+  filled.forEach(function(sec){
+    text += '*' + sec.toUpperCase() + '*\n' + S.data[sec] + '\n\n';
+  });
+  el('preview-content').textContent = text;
+}
+
+// ===== MODAL FIELDS CONFIG =====
+var SECTION_FIELDS = {
+  'Compliance':        ['nm','uauc','permits','m2notif'],
+  'ARS-2 Production':  ['lul','ab','bp','rr','ra'],
+  'ARS-3 Production':  ['ars3ra','ars3sa','ars3ba'],
+  'Bath Handling':     ['bathprod','tanker','bathstock','bathcopied'],
+  'Warehouse':         ['whstock','whsent','whrcv','whcopied'],
+  'Breakdowns':        ['bd1','bd2'],
+  'SBH & Mill':        ['sbh_data'],
+  'RMT':               ['rmt_data'],
+  'Manpower':          ['vl','ske'],
+  'Vehicles':          ['forklift','atv'],
+  'Furnace':           ['furnacein']
+};
+
+function openModal(section) {
+  S.activeModal = section;
+  debouncedPersistState();
+
+  var body = el('modal-body');
+  body.innerHTML = '';
+  var t = document.createElement('div');
+  t.className = 'modal-title'; t.textContent = section;
+  body.appendChild(t);
+  body.appendChild(buildForm(section));
+  
+  if (SECTION_FIELDS[section]) restoreInputs(section, SECTION_FIELDS[section]);
+  el('modal-overlay').classList.add('open');
+}
+
+function closeModal() { 
+  S.activeModal = null;
+  debouncedPersistState();
+  el('modal-overlay').classList.remove('open'); 
+}
+
+function saveSection(section, value, rawInputs) {
+  S.data[section] = value;
+  if (rawInputs) Object.assign(S.inputs[section] = S.inputs[section] || {}, rawInputs);
+  
+  var t = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
+  S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)=' + (S.roddedAnodesCum || 0) + '+' + (S.ars3RaFtd || 0) + '=' + t;
+
+  closeModal();
+  renderGrid();
+  renderPreview();
+  persistState();
+}
+
+function fld(id, lbl, type, ph) {
+  return '<label>' + lbl + '</label><input type="' + (type||'text') + '" id="' + id + '" placeholder="' + (ph||'') + '">';
+}
+function tarea(id, lbl, ph) {
+  return '<label>' + lbl + '</label><textarea id="' + id + '" placeholder="' + (ph||'') + '"></textarea>';
+}
+function tabs(group, labels) {
+  var h = '<div class="tab-row">';
+  labels.forEach(function(l,i){
+    h += '<button class="tab' + (i===0?' active':'') + '" data-tg="' + group + '" data-ti="' + i + '">' + l + '</button>';
+  });
+  return h + '</div>';
+}
+function saveCancelRow(fn) {
+  var row = document.createElement('div');
+  row.className = 'btn-row'; row.style.marginTop = '8px';
+  var sb = document.createElement('button');
+  sb.className = 'btn btn-primary'; sb.textContent = 'SAVE';
+  sb.addEventListener('click', fn);
+  var cb = document.createElement('button');
+  cb.className = 'btn btn-secondary'; cb.textContent = 'CANCEL';
+  cb.addEventListener('click', closeModal);
+  row.appendChild(sb); row.appendChild(cb);
+  return row;
+}
+function regexParse(raw, re) {
+  var p = {}, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(raw)) !== null) { p[m[1]] = m[2]; }
+  return p;
+}
+
+el('modal-body').addEventListener('click', function(e) {
+  var btn = e.target.closest ? e.target.closest('[data-tg]') : null;
+  if (!btn) return;
+  var group = btn.getAttribute('data-tg');
+  var idx = parseInt(btn.getAttribute('data-ti'));
+  document.querySelectorAll('[data-tg="'+group+'"]').forEach(function(t,i){
+    t.classList.toggle('active', i === idx);
+  });
+  document.querySelectorAll('[id^="'+group+'-pane-"]').forEach(function(pane){
+    var pi = parseInt(pane.id.replace(group+'-pane-',''));
+    pane.classList.toggle('hidden', pi !== idx);
+  });
+});
+
+function pane(group, idx, content, hidden) {
+  return '<div id="' + group + '-pane-' + idx + '"' + (hidden?' class="hidden"':'') + '>' + content + '</div>';
+}
+
+function buildForm(section) {
+  var wrap = document.createElement('div');
+
+  if (section === 'Compliance') {
+    wrap.innerHTML =
+      fld('nm','NM','text','0') +
+      fld('uauc','UA/UC Count','text','0/0') +
+      fld('permits','Permits (Issued/Closed)','text','0/0') +
+      fld('m2notif','M2 Notifications (Raised/Closed)','text','0/0');
+
+    wrap.appendChild(saveCancelRow(function(){
+      saveSection('Compliance',
+        '\u2022NM- '+val('nm')+' UA/UC- '+val('uauc')+' BBS:-0\n'+
+        '\u2022Permits (Issued/Closed)- '+val('permits')+'\n'+
+        '\u2022Long term isolation- 0\n'+
+        '\u2022M2 Notification (Raised/Closed)- '+val('m2notif'),
+        {nm:val('nm'),uauc:val('uauc'),permits:val('permits'),m2notif:val('m2notif')});
+    }));
+  }
+
+  else if (section === 'ARS-2 Production') {
+    wrap.innerHTML =
+      fld('lul','LUL Production (Target/Actual)','text','e.g. 800/800 OR 100p, 100p') +
+      fld('ab','AB','text','') +
+      fld('bp','BP (number)','number','') +
+      fld('rr','RR/RH/SS/RS','text','e.g. 2/1/0/0') +
+      fld('ra','Rodded Anodes (CM1,CM2 or single)','text','e.g. 120,130');
+
+    wrap.appendChild(saveCancelRow(function(){
+      var raRaw = val('ra'), roddedAnodes, cmDisplay;
+      if (raRaw.indexOf(',') !== -1) {
+        var parts = raRaw.split(',').map(function(v){ var n=parseInt(v.trim()); return isNaN(n)?0:n; });
+        roddedAnodes = parts.reduce(function(a,b){return a+b;},0);
+        cmDisplay = roddedAnodes+'('+parts.join('/')+')';
+      } else {
+        roddedAnodes = parseInt(raRaw)||0;
+        cmDisplay = String(roddedAnodes);
+      }
+      var bp = ival('bp');
+      S.roddedAnodesCum = S.nextShift==='C' ? roddedAnodes : S.prevRoddedAnode + roddedAnodes;
+
+      var lulRaw = val('lul').trim();
+      var lulDisplay = lulRaw;
+      var slashIdx = lulRaw.indexOf('/');
+      if (slashIdx !== -1) {
+        var lulTarget = lulRaw.substring(0, slashIdx).trim();
+        var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
+        var lulParts = lulActualRaw.split(',');
+        if (lulParts.length >= 2) {
+          var v1str = lulParts[0].trim();
+          var v2str = lulParts[1].trim();
+          var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
+          var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
+          var lulSum = v1 + v2;
+          lulDisplay = lulTarget + '/' + lulSum + '(' + v1 + '/' + v2 + ')';
+        }
+      }
+
+      saveSection('ARS-2 Production',
+        '\u2022 *LUL* Production (Target/Actual)- '+lulDisplay+'\n'+
+        '\u2022Rodded anodes (Cumulative)- '+S.roddedAnodesCum+'(M)\n'+
+        '\u2022Rods hooked- 0\n'+
+        '\u2022 *CM*/AB/BP- '+cmDisplay+'/'+val('ab')+'/'+bp+'\n'+
+        '\u2022RR/RH/SS/RS- '+val('rr')+'\n'+
+        '\u2022Butt/GS production- '+(bp*0.22).toFixed(0)+' mt',
+        {lul:val('lul'),ab:val('ab'),bp:val('bp'),rr:val('rr'),ra:val('ra')});
+    }));
+  }
+
+  else if (section === 'ARS-3 Production') {
+    wrap.innerHTML =
+      fld('ars3ra','RA Production (FTS)','number','') +
+      fld('ars3sa','SA Processed (FTS)','text','e.g. 200 or 50p') +
+      fld('ars3ba','BA Received sets (FTS)','number','');
+
+    wrap.appendChild(saveCancelRow(function(){
+      var fra=ival('ars3ra'), fba=ival('ars3ba');
+      var ars3saRaw = val('ars3sa').trim();
+      var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : parseInt(ars3saRaw)||0;
+      var dra=S.nextShift==='C'?fra:S.prevArs3Ra+fra;
+      var dsa=S.nextShift==='C'?fsa:S.prevArs3Sa+fsa;
+      var dba=S.nextShift==='C'?fba:S.prevArs3Ba+fba;
+      S.ars3RaFtd = dra;
+      saveSection('ARS-3 Production',
+        '*SHIFT: C+A+B*\n'+
+        'RA production(FTS/FTD): '+fra+'/'+dra+'\n'+
+        'SA processed: (FTS/FTD)- '+fsa+'/'+dsa+'\n'+
+        'BA received(sets):(FTS/FTD)- '+fba+'/'+dba,
+        {ars3ra:val('ars3ra'),ars3sa:val('ars3sa'),ars3ba:val('ars3ba')});
+    }));
+  }
+
+  else if (section === 'Total RA Cumulative') {
+    var total = (S.roddedAnodesCum||0)+(S.ars3RaFtd||0);
+    wrap.innerHTML = '<div class="info-box">ARS-2 Cumulative: <b>'+(S.roddedAnodesCum||0)+
+      '</b> + ARS-3 FTD: <b>'+(S.ars3RaFtd||0)+'</b> = <b>'+total+'</b><br>This section is automatically calculated when you save ARS-2 and ARS-3 Production sections.</div>';
+    wrap.appendChild(saveCancelRow(function(){
+      var t=(S.roddedAnodesCum||0)+(S.ars3RaFtd||0);
+      saveSection('Total RA Cumulative','(Ars-2+Ars-3)='+(S.roddedAnodesCum||0)+'+'+(S.ars3RaFtd||0)+'='+t);
+    }));
+  }
+
+  else if (section === 'Bath Handling') {
+    wrap.innerHTML =
+      tabs('bath',['Manual','Copied Text']) +
+      pane('bath',0,
+        fld('bathprod','Bath Production (mt)','number','')+
+        fld('tanker','Tankers Sent (nos)','number','')+
+        fld('bathstock','RBS1/RBS2/F1/F2/F3/F4','text','e.g. 115/157/420/457/475/450')
+      ) +
+      pane('bath',1,
+        tarea('bathcopied','Paste copied data (multiline or concatenated)',
+          'T-9\nP-361\nR1-240\n...\nor T-9P-361R1-240...'),
+        true
+      );
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('bath-pane-1').classList.contains('hidden')) {
+        var raw = val('bathcopied').replace(/\s+/g,'');
+        var p = regexParse(raw, /([A-Za-z]+\d*)-(\d+)/gi);
+        var t=parseInt(p['T']||p['t'])||0, bp2=parseInt(p['P']||p['p'])||0;
+        var tc=S.nextShift==='C'?t:S.prevTankerCum+t;
+        var bc=S.nextShift==='C'?bp2:S.prevBathCum+bp2;
+        saveSection('Bath Handling',
+          '\u2022Bath prod- '+bp2+' mt\n\u2022Cumulative bath- '+bc+' mt\n'+
+          '\u2022Tanker- '+t+' nos\n\u2022Tankers (cumulative)- '+tc+' nos\n'+
+          '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+
+          (parseInt(p['R1']||p['r1'])||0)+'/'+(parseInt(p['R2']||p['r2'])||0)+'/'+
+          (parseInt(p['F1']||p['f1'])||0)+'/'+(parseInt(p['F2']||p['f2'])||0)+'/'+
+          (parseInt(p['F3']||p['f3'])||0)+'/'+(parseInt(p['F4']||p['f4'])||0),
+          {bathcopied: val('bathcopied')});
+      } else {
+        var bp3=ival('bathprod'), tnk=ival('tanker');
+        var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
+        var bc2=S.nextShift==='C'?bp3:S.prevBathCum+bp3;
+        saveSection('Bath Handling',
+          '\u2022Bath prod- '+bp3+' mt\n\u2022Cumulative bath- '+bc2+' mt\n'+
+          '\u2022Tanker- '+tnk+' nos\n\u2022Tankers (cumulative)- '+tc2+' nos\n'+
+          '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+val('bathstock'),
+          {bathprod:val('bathprod'),tanker:val('tanker'),bathstock:val('bathstock')});
+      }
+    }));
+  }
+
+  else if (section === 'Warehouse') {
+    wrap.innerHTML =
+      tabs('wh',['Manual','Copied Text']) +
+      pane('wh',0,
+        fld('whstock','RAP/SAP/EBB/EAP','text','e.g. 316/353/8/3')+
+        fld('whsent','Sent RA/EB','text','e.g. 612/94')+
+        fld('whrcv','Rec SA/SB','text','e.g. 692/102')
+      ) +
+      pane('wh',1,
+        tarea('whcopied','Paste copied data (multiline or concatenated)',
+          'Ra-654\nSa-600\nEb-71\n...\nor Ra-654Sa-600Eb-71...'),
+        true
+      );
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('wh-pane-1').classList.contains('hidden')) {
+        var raw = val('whcopied').replace(/\s+/g,'');
+        var p = regexParse(raw, /([A-Za-z]+)-(\d+)/gi);
+        function gp(k){ return parseInt(p[k]||p[k.toLowerCase()]||p[k.toUpperCase()])||0; }
+        saveSection('Warehouse',
+          '\u2022 RAP/SAP/EBB/EAP - '+gp('Rap')+'/'+gp('Sap')+'/'+gp('Ebb')+'/'+gp('Eap')+'\n'+
+          '\u2022 Sent RA/EB - '+gp('Ra')+'/'+gp('Eb')+'\n'+
+          '\u2022 Rec SA/SB - '+gp('Sa')+'/'+gp('Sb'),
+          {whcopied: val('whcopied')});
+      } else {
+        saveSection('Warehouse',
+          '\u2022 RAP/SAP/EBB/EAP - '+val('whstock')+'\n'+
+          '\u2022 Sent RA/EB - '+val('whsent')+'\n'+
+          '\u2022 Rec SA/SB - '+val('whrcv'),
+          {whstock:val('whstock'),whsent:val('whsent'),whrcv:val('whrcv')});
+      }
+    }));
+  }
+
+  else if (section === 'Breakdowns') {
+    var alreadyFilled = S.data['Breakdowns'] !== null && S.data['Breakdowns'] !== undefined;
+    var appendHtml = alreadyFilled
+      ? '<div class="info-box" style="white-space:pre-wrap;max-height:90px;overflow-y:auto;margin-bottom:10px;"><b>Existing:</b>\n'+S.data['Breakdowns']+'</div>'+
+        tabs('bdmode',['Append','Overwrite'])
+      : '';
+    wrap.innerHTML =
+      appendHtml +
+      tabs('bd',['Type-1 (Manual)','Type-2 (Copied)']) +
+      pane('bd',0, tarea('bd1','Enter breakdowns (/ for new lines, or one per line)','')) +
+      pane('bd',1, tarea('bd2','Paste copied data - multiline or concatenated both work',
+        'Loop-7, Torque overload\n07:00:00\n07:15:00\n\nBC-11, choke\n12:00:00\n12:20:00'), true);
+    wrap.appendChild(saveCancelRow(function(){
+      var processed;
+      if (!el('bd-pane-1').classList.contains('hidden')) {
+        var raw = val('bd2');
+        var norm = raw.replace(/\r\n/g,'\n').replace(/\n+/g,'\n');
+        norm = norm.replace(/\n(\d{2}:\d{2}:\d{2})/g,'$1');
+        norm = norm.replace(/(\d{2}:\d{2}:\d{2})\n(\d{2}:\d{2})/g,'$1$2');
+        var re3 = /(.+?)(\d{2}:\d{2}):\d{2}(\d{2}:\d{2}):\d{2}/g;
+        var ev3, lines = [];
+        var now = new Date(), eightAgo = new Date(now - 8*3600*1000);
+        var dp = S.nextDate.split('/').map(Number);
+        while ((ev3 = re3.exec(norm)) !== null) {
+          var evtName = ev3[1].replace(/\n/g,' ').trim();
+          var start = ev3[2], end = ev3[3];
+          var ep = end.split(':').map(Number);
+          var endDt = new Date(dp[2],dp[1]-1,dp[0],ep[0],ep[1]);
+          if (S.nextShift==='C' && ep[0]<6) endDt.setDate(endDt.getDate()+1);
+          var notes = [];
+          if (endDt < eightAgo) notes.push('8hr deviation');
+          var ws = S.nextShift==='A'
+            ? [new Date(dp[2],dp[1]-1,dp[0],6,0), new Date(dp[2],dp[1]-1,dp[0],14,0)]
+            : S.nextShift==='B'
+            ? [new Date(dp[2],dp[1]-1,dp[0],14,0), new Date(dp[2],dp[1]-1,dp[0],22,0)]
+            : [new Date(dp[2],dp[1]-1,dp[0],22,0), new Date(dp[2],dp[1]-1,dp[0]+1,6,0)];
+          if (endDt < ws[0] || endDt > ws[1]) notes.push('Shift deviation');
+          lines.push('*'+evtName+'('+to12hr(start)+'-'+to12hr(end)+')'+(notes.length?' '+notes.join(' & '):''));
+        }
+        processed = lines.join('\n');
+      } else {
+        var t1 = val('bd1');
+        processed = t1.indexOf('/') !== -1 ? t1.replace(/\//g,'\n') : t1;
+      }
+      var modeBtn = document.querySelector('[data-tg="bdmode"].active');
+      var isAppend = alreadyFilled && modeBtn && modeBtn.getAttribute('data-ti') === '0';
+      saveSection('Breakdowns', isAppend ? S.data['Breakdowns']+'\n'+processed : processed, {bd1: val('bd1'), bd2: val('bd2')});
+    }));
+  }
+
+  else if (section === 'SBH & Mill') {
+    var sbhExisting = S.data['SBH & Mill'] || '';
+    wrap.innerHTML = (sbhExisting ? '<div class="info-box" style="white-space:pre-wrap;max-height:80px;overflow-y:auto;margin-bottom:8px;"><b>Existing:</b>\n'+sbhExisting+'</div>' : '') +
+      (sbhExisting ? tabs('sbhmode',['Append','Overwrite']) : '') +
+      tarea('sbh_data', sbhExisting ? 'New entry' : 'SBH & Mill Data', '');
+    wrap.appendChild(saveCancelRow(function(){
+      var newVal = val('sbh_data');
+      var modeBtn = document.querySelector('[data-tg="sbhmode"].active');
+      var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
+      var combined = sbhExisting ? (isOverwrite ? (newVal || sbhExisting) : (newVal ? sbhExisting+'\n'+newVal : sbhExisting)) : newVal;
+      saveSection('SBH & Mill', combined, {sbh_data: val('sbh_data')});
+    }));
+  }
+
+  else if (section === 'RMT') {
+    var rmtExisting = S.data['RMT'] || '';
+    wrap.innerHTML = (rmtExisting ? '<div class="info-box" style="white-space:pre-wrap;max-height:80px;overflow-y:auto;margin-bottom:8px;"><b>Existing:</b>\n'+rmtExisting+'</div>' : '') +
+      (rmtExisting ? tabs('rmtmode',['Append','Overwrite']) : '') +
+      tarea('rmt_data', rmtExisting ? 'New entry' : 'RMT Data', '');
+    wrap.appendChild(saveCancelRow(function(){
+      var newVal = val('rmt_data');
+      var modeBtn = document.querySelector('[data-tg="rmtmode"].active');
+      var isOverwrite = modeBtn && modeBtn.getAttribute('data-ti') === '1';
+      var combined = rmtExisting ? (isOverwrite ? (newVal || rmtExisting) : (newVal ? rmtExisting+'\n'+newVal : rmtExisting)) : newVal;
+      saveSection('RMT', combined, {rmt_data: val('rmt_data')});
+    }));
+  }
+
+  else if (section === 'Manpower') {
+    wrap.innerHTML =
+      fld('vl','VL (Planned/Actual)','text','e.g. 2/1') +
+      fld('ske','SKE (Planned/Actual)','text','e.g. 5/5');
+
+    wrap.appendChild(saveCancelRow(function(){
+      saveSection('Manpower',
+        '\u2022VL(Planned/Actual)-'+val('vl')+'\n\u2022SKE(Planned/Actual)-'+val('ske'),
+        {vl:val('vl'),ske:val('ske')});
+    }));
+  }
+
+  else if (section === 'Vehicles') {
+    wrap.innerHTML =
+      tabs('veh',['Manual','Use Previous']) +
+      pane('veh',0, fld('forklift','Forklift (3T/10T)','text','e.g. 1/1')+fld('atv','ATV count','text','e.g. 2')) +
+      pane('veh',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.vehicleContent||'No vehicle data found.')+'</div>', true);
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('veh-pane-1').classList.contains('hidden')) {
+        saveSection('Vehicles', S.vehicleContent);
+      } else {
+        saveSection('Vehicles',
+          '\u2022Forklift (3T/10T)- '+val('forklift')+'\n\u2022ATV-'+val('atv'),
+          {forklift:val('forklift'),atv:val('atv')});
+      }
+    }));
+  }
+
+  else if (section === 'Furnace') {
+    wrap.innerHTML =
+      tabs('fur',['Manual','Use Previous']) +
+      pane('fur',0, fld('furnacein','Furnace in operation info','text','')) +
+      pane('fur',1, '<div class="info-box" style="white-space:pre-wrap;">'+(S.furnaceContent||'No furnace data found.')+'</div>', true);
+
+    wrap.appendChild(saveCancelRow(function(){
+      if (!el('fur-pane-1').classList.contains('hidden')) {
+        saveSection('Furnace', S.furnaceContent);
+      } else {
+        saveSection('Furnace',
+          '\u2022Ladle: 04 running,  2 preheating & 2 air dry\n\u2022Furnace in per- '+val('furnacein'),
+          {furnacein:val('furnacein')});
+      }
+    }));
+  }
+
+  return wrap;
+}
+
+// ===== CONTRIBUTOR MULTI-SECTION & SUBSECTION ENGINE =====
+async function setupContributorView(rawSecParam, rawSubParam) {
+  S.nextDate = getAutoDate();
+  S.nextShift = getAutoShift();
+  el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
+
+  goPhase(4);
+
+  var secKeys = (rawSecParam || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  var subKeys = (rawSubParam || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  var titleParts = secKeys.map(function(k) {
+    if (k === 'ars2' && subKeys.length > 0) {
+      return 'ARS-2 (' + subKeys.map(s => s.toUpperCase()).join('/') + ')';
+    }
+    return SECTION_KEYS[k] || k.toUpperCase();
+  });
+  el('contributor-title').textContent = titleParts.join(' + ') || 'Direct Section Entry';
+  el('contributor-info-box').innerHTML = `Date: <b>${S.nextDate}</b> | Shift: <b>${S.nextShift}</b> | Ready to fill.`;
+
+  var wrap = el('contributor-form-wrap');
+  wrap.innerHTML = '';
+
+  secKeys.forEach(function(secKey) {
+    var fullSec = SECTION_KEYS[secKey];
+    if (!fullSec) return;
+
+    var secCard = document.createElement('div');
+    secCard.style.cssText = 'border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:18px; background:var(--surface2);';
+
+    var cardHeader = document.createElement('div');
+    cardHeader.style.cssText = 'color:var(--accent); font-weight:800; text-transform:uppercase; margin-bottom:12px; font-size:14px;';
+    cardHeader.textContent = fullSec + (secKey === 'ars2' && subKeys.length > 0 ? ' [' + subKeys.map(s => s.toUpperCase()).join(', ') + ']' : '');
+    secCard.appendChild(cardHeader);
+
+    if (secKey === 'ars2' && subKeys.length > 0) {
+      var curInp = S.inputs['ARS-2 Production'] || {};
+      var subLabels = {
+        'lul': 'LUL Production (Target/Actual) - e.g. 800/800 or 100p, 100p',
+        'ab':  'AB count',
+        'bp':  'BP (number)',
+        'rr':  'RR/RH/SS/RS - e.g. 2/1/0/0',
+        'ra':  'Rodded Anodes (CM1, CM2 or single)'
+      };
+
+      subKeys.forEach(function(k) {
+        var savedVal = curInp[k] || '';
+        var lbl = subLabels[k] || k.toUpperCase();
+        var type = k === 'bp' ? 'number' : 'text';
+        var fieldDiv = document.createElement('div');
+        fieldDiv.innerHTML = `<label style="margin-top:6px;">${lbl}</label>
+                              <input type="${type}" id="sub_${k}" value="${savedVal}" style="margin-bottom:12px;">`;
+        secCard.appendChild(fieldDiv);
+      });
+
+      var subSaveBtn = document.createElement('button');
+      subSaveBtn.className = 'btn btn-primary';
+      subSaveBtn.textContent = 'SAVE ARS-2 SUBSECTION(S)';
+      var subMsg = document.createElement('div');
+      subMsg.style.cssText = 'font-size:12px; margin-top:8px;';
+
+      subSaveBtn.addEventListener('click', function() {
+        var cur = S.inputs['ARS-2 Production'] || {};
+        subKeys.forEach(function(k) {
+          var inputEl = el('sub_' + k);
+          if (inputEl) cur[k] = inputEl.value.trim();
+        });
+        S.inputs['ARS-2 Production'] = cur;
+
+        var raRaw = cur['ra'] || '', roddedAnodes = 0, cmDisplay = '';
+        if (raRaw.indexOf(',') !== -1) {
+          var parts = raRaw.split(',').map(v => parseInt(v.trim()) || 0);
+          roddedAnodes = parts.reduce((a,b)=>a+b, 0);
+          cmDisplay = roddedAnodes + '(' + parts.join('/') + ')';
+        } else {
+          roddedAnodes = parseInt(raRaw) || 0;
+          cmDisplay = String(roddedAnodes);
+        }
+        var bp = parseInt(cur['bp']) || 0;
+        var roddedCum = S.nextShift === 'C' ? roddedAnodes : ((S.prevRoddedAnode || 0) + roddedAnodes);
+
+        var lulRaw = (cur['lul'] || '').trim();
+        var lulDisplay = lulRaw;
+        var slashIdx = lulRaw.indexOf('/');
+        if (slashIdx !== -1) {
+          var lulTarget = lulRaw.substring(0, slashIdx).trim();
+          var lulActualRaw = lulRaw.substring(slashIdx + 1).trim();
+          var lulParts = lulActualRaw.split(',');
+          if (lulParts.length >= 2) {
+            var v1str = lulParts[0].trim(), v2str = lulParts[1].trim();
+            var v1 = v1str.endsWith('p') ? parseInt(v1str) * 4 : parseInt(v1str);
+            var v2 = v2str.endsWith('p') ? parseInt(v2str) * 4 : parseInt(v2str);
+            lulDisplay = lulTarget + '/' + (v1 + v2) + '(' + v1 + '/' + v2 + ')';
+          }
+        }
+
+        var textVal = '\u2022 *LUL* Production (Target/Actual)- ' + lulDisplay + '\n' +
+                      '\u2022Rodded anodes (Cumulative)- ' + roddedCum + '(M)\n' +
+                      '\u2022Rods hooked- 0\n' +
+                      '\u2022 *CM*/AB/BP- ' + cmDisplay + '/' + (cur['ab'] || '') + '/' + bp + '\n' +
+                      '\u2022RR/RH/SS/RS- ' + (cur['rr'] || '') + '\n' +
+                      '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
+
+        S.data['ARS-2 Production'] = textVal;
+        debouncedPersistState();
+        subMsg.innerHTML = '<span style="color:var(--green)">✓ Saved locally!</span>';
+      });
+
+      secCard.appendChild(subSaveBtn);
+      secCard.appendChild(subMsg);
+
+    } else {
+      var formEl = buildForm(fullSec);
+      secCard.appendChild(formEl);
+      if (SECTION_FIELDS[fullSec]) restoreInputs(fullSec, SECTION_FIELDS[fullSec]);
+      
+      secCard.querySelectorAll('.btn-secondary').forEach(b => b.style.display = 'none');
+
+      var feedbackMsg = document.createElement('div');
+      feedbackMsg.style.cssText = 'font-size:12px; margin-top:8px;';
+      secCard.appendChild(feedbackMsg);
+
+      var saveBtn = secCard.querySelector('.btn-primary');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+          feedbackMsg.innerHTML = '<span style="color:var(--green)">✓ Saved locally!</span>';
+        });
+      }
+    }
+
+    wrap.appendChild(secCard);
+  });
+}
+
+// ===== DYNAMIC LINK GENERATOR BUILDER =====
+function buildDynamicLink() {
+  var base = window.location.href.split('?')[0];
+
+  var ars2Whole = el('chk-sec-ars2').checked;
+  var subCheckboxes = document.querySelectorAll('.ars2-sub-chk:checked');
+  var selectedSubs = Array.from(subCheckboxes).map(c => c.value);
+  
+  var mainSecCheckboxes = document.querySelectorAll('.main-sec-chk:checked');
+  var selectedMainSecs = Array.from(mainSecCheckboxes).map(c => c.value);
+
+  var secList = [];
+
+  if (ars2Whole || selectedSubs.length > 0) {
+    secList.push('ars2');
+  }
+
+  selectedMainSecs.forEach(function(s) {
+    secList.push(s);
+  });
+
+  var outputEl = el('custom-link-output');
+
+  if (secList.length === 0) {
+    outputEl.value = '';
+    outputEl.placeholder = 'Select sections or ARS-2 subsections above...';
+    return;
+  }
+
+  var finalUrl = base + '?sec=' + secList.join(',');
+  if (!ars2Whole && selectedSubs.length > 0) {
+    finalUrl += '&sub=' + selectedSubs.join(',');
+  }
+
+  outputEl.value = finalUrl;
+}
+
+el('open-share-btn').addEventListener('click', function() {
+  buildDynamicLink();
+  el('share-modal-overlay').classList.add('open');
+});
+
+el('close-share-modal').addEventListener('click', function() {
+  el('share-modal-overlay').classList.remove('open');
+});
+
+el('chk-sec-ars2').addEventListener('change', function() {
+  var subs = document.querySelectorAll('.ars2-sub-chk');
+  if (this.checked) {
+    subs.forEach(c => { c.checked = false; c.disabled = true; });
+  } else {
+    subs.forEach(c => c.disabled = false);
+  }
+  buildDynamicLink();
+});
+
+document.querySelectorAll('.main-sec-chk, .ars2-sub-chk').forEach(function(chk) {
+  chk.addEventListener('change', buildDynamicLink);
+});
+
+el('copy-custom-link-btn').addEventListener('click', function() {
+  var link = el('custom-link-output').value.trim();
+  if (!link) {
+    alert('Please select at least one section or subsection.');
+    return;
+  }
+  navigator.clipboard.writeText(link).then(() => {
+    var originalText = this.textContent;
+    this.textContent = 'COPIED!';
+    setTimeout(() => this.textContent = originalText, 1500);
+  });
+});
+
+el('reset-selection-btn').addEventListener('click', function() {
+  el('chk-sec-ars2').checked = false;
+  document.querySelectorAll('.ars2-sub-chk').forEach(c => { c.checked = false; c.disabled = false; });
+  document.querySelectorAll('.main-sec-chk').forEach(c => c.checked = false);
+  buildDynamicLink();
+});
+
+// ===== GENERATE =====
+function generateReport() {
+  var report = '\n*Date:-'+S.nextDate+'*\n*Shift:-'+S.nextShift+'*\n\n';
+  SECTIONS.forEach(function(sec){
+    if (S.data[sec]) report += '*'+sec.toUpperCase()+'*\n'+S.data[sec]+'\n\n';
+  });
+  report += 'Regards\nOmkar & Santanu\n';
+  el('report-output').textContent = report;
+  goPhase(3);
+}
+
+// Boot check
+if (isContributor) {
+  setupContributorView(targetSecKey, targetSubKey);
+} else {
+  var restored = await checkAndRestoreState();
+  if (!restored) {
+    goPhase(1);
+  }
+}
+
+});
+</script>
+</body>
+</html>
