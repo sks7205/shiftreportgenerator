@@ -350,14 +350,26 @@ function openDB() {
   });
 }
 
-async function persistState() {
-  var serialized = JSON.stringify(S);
+async function writeToDB(serialized) {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(serialized, 'current_draft');
   } catch (err) {}
-  try { localStorage.setItem('ars_report_gas_backup', serialized); } catch (e) {}
+}
+
+// Non-blocking in-memory backup and background queue
+function persistState() {
+  var serialized = JSON.stringify(S);
+  try { 
+    localStorage.setItem('ars_report_gas_backup', serialized); 
+  } catch (e) {}
+
+  if (window.requestIdleCallback) {
+    window.requestIdleCallback(() => writeToDB(serialized));
+  } else {
+    setTimeout(() => writeToDB(serialized), 0);
+  }
 }
 
 let persistTimeout = null;
@@ -607,26 +619,26 @@ async function syncFromCloud() {
   }
 }
 
-async function pushSectionToCloud(section, textVal, rawInp) {
-  try {
-    await fetch(gasWebAppUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'saveShiftReportSection',
-        data: {
-          date: S.nextDate,
-          shift: S.nextShift,
-          section: section,
-          value: textVal,
-          rawInputs: rawInp,
-          enteredBy: isContributor ? 'Direct Link' : 'Incharge'
-        }
-      })
-    });
-  } catch(e) {
-    console.warn("Could not post to cloud:", e);
-  }
+function pushSectionToCloud(section, textVal, rawInp) {
+  const payload = JSON.stringify({
+    action: 'saveShiftReportSection',
+    data: {
+      date: S.nextDate,
+      shift: S.nextShift,
+      section: section,
+      value: textVal,
+      rawInputs: rawInp,
+      enteredBy: isContributor ? 'Direct Link' : 'Incharge'
+    }
+  });
+
+  fetch(gasWebAppUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    keepalive: true,
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: payload
+  }).catch(e => console.warn("Background upload error:", e));
 }
 
 // ===== PARSE BUTTON =====
@@ -1026,16 +1038,12 @@ function saveSection(section, value, rawInputs) {
   var t = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
   S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)=' + (S.roddedAnodesCum || 0) + '+' + (S.ars3RaFtd || 0) + '=' + t;
 
-  // Immediate UI update without waiting for network roundtrip
   closeModal();
   renderGrid();
   renderPreview();
   persistState();
 
-  // Async background sync
-  pushSectionToCloud(section, value, S.inputs[section]).catch(err => {
-    console.warn("Background cloud sync failed:", err);
-  });
+  pushSectionToCloud(section, value, S.inputs[section]);
 }
 
 function fld(id, lbl, type, ph) {
@@ -1458,7 +1466,6 @@ async function setupContributorView(rawSecParam, rawSubParam) {
       subMsg.style.cssText = 'font-size:12px; margin-top:8px;';
 
       subSaveBtn.addEventListener('click', function() {
-        subMsg.textContent = 'Saving...';
         var cur = S.inputs['ARS-2 Production'] || {};
         subKeys.forEach(function(k) {
           var inputEl = el('sub_' + k);
@@ -1500,9 +1507,8 @@ async function setupContributorView(rawSecParam, rawSubParam) {
                       '\u2022RR/RH/SS/RS- ' + (cur['rr'] || '') + '\n' +
                       '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
 
-        // Non-blocking save
         debouncedPersistState();
-        pushSectionToCloud('ARS-2 Production', textVal, cur).catch(e => console.warn(e));
+        pushSectionToCloud('ARS-2 Production', textVal, cur);
         subMsg.innerHTML = '<span style="color:var(--green)">✓ Saved successfully!</span>';
       });
 
