@@ -820,12 +820,12 @@ Return a STRICT, RAW JSON object:
             "Content-Type": "application/json"
           },
         body: JSON.stringify({
-        model: "llama-3.2-11b-vision", // Updated active model name
-        messages: [{ role: "user", content: contentArray }],
-        temperature: 0.1,
-        response_format: { type: "json_object" }
+          model: "llama-3.2-11b-vision", // Updated active model name
+          messages: [{ role: "user", content: contentArray }],
+          temperature: 0.1,
+          response_format: { type: "json_object" }
         })
-});
+      });
 
         if (!response.ok) {
           const errData = await response.json();
