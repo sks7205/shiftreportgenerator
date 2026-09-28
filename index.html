@@ -360,6 +360,12 @@ async function persistState() {
   try { localStorage.setItem('ars_report_gas_backup', serialized); } catch (e) {}
 }
 
+let persistTimeout = null;
+function debouncedPersistState() {
+  clearTimeout(persistTimeout);
+  persistTimeout = setTimeout(persistState, 400);
+}
+
 async function clearSavedState() {
   try {
     const db = await openDB();
@@ -441,7 +447,7 @@ function renderResumeBanner() {
 
 el('prev-report-input').addEventListener('input', function() {
   S.prevReportRaw = this.value;
-  persistState();
+  debouncedPersistState();
 });
 
 el('modal-body').addEventListener('input', function(e) {
@@ -450,7 +456,7 @@ el('modal-body').addEventListener('input', function(e) {
   S.inputs[sec] = S.inputs[sec] || {};
   if (e.target.id) {
     S.inputs[sec][e.target.id] = e.target.value;
-    persistState();
+    debouncedPersistState();
   }
 });
 
@@ -770,7 +776,7 @@ el('preview-toggle-btn').addEventListener('click', function(){
   this.textContent = hidden ? 'HIDE' : 'SHOW';
 });
 
-// ===== AI EXTRACTION HANDLERS =====
+// ===== AI EXTRACTION & IMAGE RESIZING =====
 function setupImageUpload(inputId, previewId, thumbId, clearId) {
     var input = el(inputId);
     input.addEventListener('change', function() {
@@ -794,13 +800,40 @@ function setupImageUpload(inputId, previewId, thumbId, clearId) {
 setupImageUpload('prod-img', 'prod-preview', 'prod-thumb', 'prod-clear');
 setupImageUpload('bd-img', 'bd-preview', 'bd-thumb', 'bd-clear');
 
-function getBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = error => reject(error);
-    });
+function getCompressedBase64(file, maxDimension = 1600, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl.split(',')[1]);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 el('ai-process-btn').addEventListener('click', async function(){
@@ -814,11 +847,11 @@ el('ai-process-btn').addEventListener('click', async function(){
     
     el('ai-loader').classList.add('active');
     
-    var base64Array = [];
-    if(prodInput.files.length > 0) base64Array.push(await getBase64(prodInput.files[0]));
-    if(bdInput.files.length > 0) base64Array.push(await getBase64(bdInput.files[0]));
-    
     try {
+        var base64Array = [];
+        if(prodInput.files.length > 0) base64Array.push(await getCompressedBase64(prodInput.files[0]));
+        if(bdInput.files.length > 0) base64Array.push(await getCompressedBase64(bdInput.files[0]));
+
         const response = await fetch(gasWebAppUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -967,7 +1000,7 @@ var SECTION_FIELDS = {
 
 function openModal(section) {
   S.activeModal = section;
-  persistState();
+  debouncedPersistState();
 
   var body = el('modal-body');
   body.innerHTML = '';
@@ -982,23 +1015,27 @@ function openModal(section) {
 
 function closeModal() { 
   S.activeModal = null;
-  persistState();
+  debouncedPersistState();
   el('modal-overlay').classList.remove('open'); 
 }
 
-async function saveSection(section, value, rawInputs) {
+function saveSection(section, value, rawInputs) {
   S.data[section] = value;
   if (rawInputs) Object.assign(S.inputs[section] = S.inputs[section] || {}, rawInputs);
   
   var t = (S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0);
-  S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)='+(S.roddedAnodesCum || 0)+'+'+(S.ars3RaFtd || 0)+'='+t;
+  S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)=' + (S.roddedAnodesCum || 0) + '+' + (S.ars3RaFtd || 0) + '=' + t;
 
-  await pushSectionToCloud(section, value, S.inputs[section]);
-
+  // Immediate UI update without waiting for network roundtrip
   closeModal();
   renderGrid();
   renderPreview();
   persistState();
+
+  // Async background sync
+  pushSectionToCloud(section, value, S.inputs[section]).catch(err => {
+    console.warn("Background cloud sync failed:", err);
+  });
 }
 
 function fld(id, lbl, type, ph) {
@@ -1247,7 +1284,7 @@ function buildForm(section) {
         var raw = val('bd2');
         var norm = raw.replace(/\r\n/g,'\n').replace(/\n+/g,'\n');
         norm = norm.replace(/\n(\d{2}:\d{2}:\d{2})/g,'$1');
-        norm = norm.replace(/(\d{2}:\d{2}:\d{2})\n(\d{2}:\d{2}:\d{2})/g,'$1$2');
+        norm = norm.replace(/(\d{2}:\d{2}:\d{2})\n(\d{2}:\d{2})/g,'$1$2');
         var re3 = /(.+?)(\d{2}:\d{2}):\d{2}(\d{2}:\d{2}):\d{2}/g;
         var ev3, lines = [];
         var now = new Date(), eightAgo = new Date(now - 8*3600*1000);
@@ -1364,7 +1401,6 @@ async function setupContributorView(rawSecParam, rawSubParam) {
 
   goPhase(4);
 
-  // Split comma-separated sections
   var secKeys = (rawSecParam || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   var subKeys = (rawSubParam || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
@@ -1395,7 +1431,6 @@ async function setupContributorView(rawSecParam, rawSubParam) {
     cardHeader.textContent = fullSec + (secKey === 'ars2' && subKeys.length > 0 ? ' [' + subKeys.map(s => s.toUpperCase()).join(', ') + ']' : '');
     secCard.appendChild(cardHeader);
 
-    // If ARS-2 and specific subsections were passed
     if (secKey === 'ars2' && subKeys.length > 0) {
       var curInp = S.inputs['ARS-2 Production'] || {};
       var subLabels = {
@@ -1422,8 +1457,8 @@ async function setupContributorView(rawSecParam, rawSubParam) {
       var subMsg = document.createElement('div');
       subMsg.style.cssText = 'font-size:12px; margin-top:8px;';
 
-      subSaveBtn.addEventListener('click', async function() {
-        subMsg.textContent = 'Saving to database...';
+      subSaveBtn.addEventListener('click', function() {
+        subMsg.textContent = 'Saving...';
         var cur = S.inputs['ARS-2 Production'] || {};
         subKeys.forEach(function(k) {
           var inputEl = el('sub_' + k);
@@ -1465,7 +1500,9 @@ async function setupContributorView(rawSecParam, rawSubParam) {
                       '\u2022RR/RH/SS/RS- ' + (cur['rr'] || '') + '\n' +
                       '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
 
-        await pushSectionToCloud('ARS-2 Production', textVal, cur);
+        // Non-blocking save
+        debouncedPersistState();
+        pushSectionToCloud('ARS-2 Production', textVal, cur).catch(e => console.warn(e));
         subMsg.innerHTML = '<span style="color:var(--green)">✓ Saved successfully!</span>';
       });
 
@@ -1473,27 +1510,20 @@ async function setupContributorView(rawSecParam, rawSubParam) {
       secCard.appendChild(subMsg);
 
     } else {
-      // Build full section form
       var formEl = buildForm(fullSec);
       secCard.appendChild(formEl);
       if (SECTION_FIELDS[fullSec]) restoreInputs(fullSec, SECTION_FIELDS[fullSec]);
       
-      // Remove modal cancel buttons
       secCard.querySelectorAll('.btn-secondary').forEach(b => b.style.display = 'none');
 
-      // Add feedback element & wire save confirmation to the section's save button
       var feedbackMsg = document.createElement('div');
       feedbackMsg.style.cssText = 'font-size:12px; margin-top:8px;';
       secCard.appendChild(feedbackMsg);
 
       var saveBtn = secCard.querySelector('.btn-primary');
       if (saveBtn) {
-        saveBtn.addEventListener('click', async function() {
-          feedbackMsg.innerHTML = '<span style="color:var(--accent2)">Saving to database...</span>';
-          // Wait for saveSection and pushSectionToCloud to finish
-          setTimeout(function() {
-            feedbackMsg.innerHTML = '<span style="color:var(--green)">✓ Saved successfully!</span>';
-          }, 800);
+        saveBtn.addEventListener('click', function() {
+          feedbackMsg.innerHTML = '<span style="color:var(--green)">✓ Saved successfully!</span>';
         });
       }
     }
@@ -1515,12 +1545,10 @@ function buildDynamicLink() {
 
   var secList = [];
 
-  // 1. Add ARS-2 if selected (either whole or through subsections)
   if (ars2Whole || selectedSubs.length > 0) {
     secList.push('ars2');
   }
 
-  // 2. Add other checked sections
   selectedMainSecs.forEach(function(s) {
     secList.push(s);
   });
@@ -1550,7 +1578,6 @@ el('close-share-modal').addEventListener('click', function() {
   el('share-modal-overlay').classList.remove('open');
 });
 
-// Toggling whole ARS-2 disables the individual ARS-2 sub-checkboxes
 el('chk-sec-ars2').addEventListener('change', function() {
   var subs = document.querySelectorAll('.ars2-sub-chk');
   if (this.checked) {
@@ -1561,7 +1588,6 @@ el('chk-sec-ars2').addEventListener('change', function() {
   buildDynamicLink();
 });
 
-// Listen to all checkbox changes to rebuild link in real time
 document.querySelectorAll('.main-sec-chk, .ars2-sub-chk').forEach(function(chk) {
   chk.addEventListener('change', buildDynamicLink);
 });
