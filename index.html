@@ -87,7 +87,7 @@ textarea{resize:vertical;min-height:80px;}
 <div class="app">
   <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:5%"></div></div>
 
-  <!-- PHASE 1: PASTE PREVIOUS (MASTER ONLY) -->
+  <!-- PHASE 1: PASTE PREVIOUS -->
   <div id="phase-prev-report" class="active">
     <div id="resume-container"></div>
     <div class="card">
@@ -482,13 +482,28 @@ function ival(id) { var v = parseInt(val(id)); return isNaN(v) ? 0 : v; }
 
 function xStr(re, txt) {
   var m = txt.match(re);
-  return m ? m[1].trim() : null;
+  return m ? (m[1] !== undefined ? m[1].trim() : m[0].trim()) : null;
 }
 function xInt(re, txt) {
   var m = txt.match(re);
   if (!m) return 0;
-  var v = parseInt(m[1]);
+  var v = parseInt(m[1] !== undefined ? m[1] : m[0]);
   return isNaN(v) ? 0 : v;
+}
+
+// ROBUST DATE & SHIFT EXTRACTORS
+function extractDateFromReport(txt) {
+  var m = txt.match(/Date\s*[:\-\*]+\s*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{2,4})/i);
+  if (m) return m[1].trim();
+  m = txt.match(/([0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{2,4})/);
+  return m ? m[1].trim() : null;
+}
+
+function extractShiftFromReport(txt) {
+  var m = txt.match(/Shift\s*[:\-\*]+\s*([ABCabc])/i);
+  if (m) return m[1].toUpperCase().trim();
+  m = txt.match(/[*_]?Shift[*_]?\s*[:\-\s]*([ABCabc])\b/i);
+  return m ? m[1].toUpperCase().trim() : null;
 }
 
 function nextShiftCalc(prevDate, prevShift) {
@@ -541,66 +556,74 @@ function goPhase(n) {
 
 // ===== PARSE BUTTON =====
 el('parse-btn').addEventListener('click', function() {
-  var txt = el('prev-report-input').value.trim();
-  if (!txt) { alert('Please paste the previous shift report.'); return; }
+  try {
+    var txt = el('prev-report-input').value.trim();
+    if (!txt) { 
+      alert('Please paste the previous shift report.'); 
+      return; 
+    }
 
-  var prevDate    = xStr(/Date\s*(?:[:-]+)?\s*([\d\/.-]+)/i, txt);
-  var prevShiftRaw = xStr(/Shift\s*(?:[:-]+)?\s*([ABC])/i, txt);
+    var prevDate = extractDateFromReport(txt);
+    var prevShiftRaw = extractShiftFromReport(txt);
 
-  if (!prevDate || !prevShiftRaw) {
-    alert('Could not find Date or Shift in the report.\nMake sure it contains lines like:\n*Date:-DD/MM/YYYY*\n*Shift:-A*');
-    return;
+    if (!prevDate || !prevShiftRaw) {
+      alert('Could not find Date or Shift in the pasted report.\n\nMake sure it contains lines like:\n*Date:-DD/MM/YYYY*\n*Shift:-A*');
+      return;
+    }
+
+    var newPrevDate = prevDate;
+    var newPrevShift = prevShiftRaw.toUpperCase();
+    var isSameShift = (S.prevDate === newPrevDate && S.prevShift === newPrevShift);
+
+    S.prevReportRaw = txt;
+    S.prevDate  = newPrevDate;
+    S.prevShift = newPrevShift;
+
+    var ns = nextShiftCalc(S.prevDate, S.prevShift);
+    S.nextDate  = ns.nextDate;
+    S.nextShift = ns.nextShift;
+
+    S.prevTankerCum   = xInt(/Tankers?\s*\(cumulative\)\s*[-:]*\s*(\d+)/i, txt);
+    S.prevBathCum     = xInt(/Cumulative\s*bath\s*[-:]*\s*(\d+)/i, txt);
+    S.prevRoddedAnode = xInt(/Rodded\s*anodes?\s*\(Cumulative\)\s*[-:]*\s*(\d+)/i, txt);
+
+    var m;
+    m = txt.match(/RA\s*production[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+    S.prevArs3Ra = m ? parseInt(m[1]) : 0;
+    m = txt.match(/SA\s*processed[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+    S.prevArs3Sa = m ? parseInt(m[1]) : 0;
+    m = txt.match(/BA\s*received[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+    S.prevArs3Ba = m ? parseInt(m[1]) : 0;
+
+    m = txt.match(/[*]?FURNACE[*]?\s*([\s\S]*?)(?=[*]?Regards[*]?|$)/i);
+    S.furnaceContent = m ? m[1].trim() : '';
+    m = txt.match(/[*]?VEHICLES[*]?\s*([\s\S]*?)\s*(?=[*]?FURNACE[*]?|$)/i);
+    var vc = m ? m[1].trim() : '';
+    if (vc) vc = vc.replace(/\./g,'\n').replace(/\u2022/g,'\n\u2022');
+    S.vehicleContent = vc;
+
+    if (!isSameShift) {
+      S.data = {};
+      S.inputs = {};
+      SECTIONS.forEach(function(sec){ S.data[sec] = null; });
+      S.ars3RaFtd = 0;
+      S.roddedAnodesCum = 0;
+    }
+
+    el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
+    el('shift-info-box').textContent =
+      'Generating for: Date ' + S.nextDate + '  |  Shift ' + S.nextShift +
+      '  |  Prev Tanker Cum: ' + S.prevTankerCum +
+      '  |  Prev Bath Cum: ' + S.prevBathCum;
+
+    renderGrid();
+    renderPreview();
+    persistState();
+    goPhase(2);
+  } catch(err) {
+    alert("Error while parsing: " + err.message);
+    console.error(err);
   }
-
-  var newPrevDate = prevDate;
-  var newPrevShift = prevShiftRaw.toUpperCase();
-  var isSameShift = (S.prevDate === newPrevDate && S.prevShift === newPrevShift);
-
-  S.prevReportRaw = txt;
-  S.prevDate  = newPrevDate;
-  S.prevShift = newPrevShift;
-
-  var ns = nextShiftCalc(S.prevDate, S.prevShift);
-  S.nextDate  = ns.nextDate;
-  S.nextShift = ns.nextShift;
-
-  S.prevTankerCum   = xInt(/Tankers\s*\(cumulative\)\s*-\s*(\d+)/i, txt);
-  S.prevBathCum     = xInt(/Cumulative\s*bath\s*-\s*(\d+)/i, txt);
-  S.prevRoddedAnode = xInt(/Rodded\s*anodes\s*\(Cumulative\)\s*-\s*(\d+)/i, txt);
-
-  var m;
-  m = txt.match(/RA\s*production[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
-  S.prevArs3Ra = m ? parseInt(m[1]) : 0;
-  m = txt.match(/SA\s*processed[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
-  S.prevArs3Sa = m ? parseInt(m[1]) : 0;
-  m = txt.match(/BA\s*received[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
-  S.prevArs3Ba = m ? parseInt(m[1]) : 0;
-
-  m = txt.match(/[*]?FURNACE[*]?\s*([\s\S]*?)(?=[*]?Regards[*]?)/i);
-  S.furnaceContent = m ? m[1].trim() : '';
-  m = txt.match(/[*]?VEHICLES[*]?\s*([\s\S]*?)\s*(?=[*]?FURNACE[*]?)/i);
-  var vc = m ? m[1].trim() : '';
-  if (vc) vc = vc.replace(/\./g,'\n').replace(/\u2022/g,'\n\u2022');
-  S.vehicleContent = vc;
-
-  if (!isSameShift) {
-    S.data = {};
-    S.inputs = {};
-    SECTIONS.forEach(function(sec){ S.data[sec] = null; });
-    S.ars3RaFtd = 0;
-    S.roddedAnodesCum = 0;
-  }
-
-  el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
-  el('shift-info-box').textContent =
-    'Generating for: Date ' + S.nextDate + '  |  Shift ' + S.nextShift +
-    '  |  Prev Tanker Cum: ' + S.prevTankerCum +
-    '  |  Prev Bath Cum: ' + S.prevBathCum;
-
-  renderGrid();
-  renderPreview();
-  persistState();
-  goPhase(2);
 });
 
 el('back-btn').addEventListener('click', function(){ 
@@ -746,7 +769,6 @@ el('ai-process-btn').addEventListener('click', async function(){
     const prodInput = el('prod-img');
     const bdInput = el('bd-img');
     
-    // Resolve key: Priority 1. GitHub injected secret, Priority 2. Local storage, Priority 3. Input field
     let apiKey = (INJECTED_KEY && !INJECTED_KEY.startsWith("__")) ? INJECTED_KEY : (localStorage.getItem('ars_groq_api_key') || el('groq-key-input').value.trim());
 
     if(!apiKey) {
