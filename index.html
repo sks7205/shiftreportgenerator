@@ -108,6 +108,21 @@ textarea{resize:vertical;min-height:80px;}
   <div id="phase-prev-report" class="active">
     <div id="resume-container"></div>
     <div class="card">
+      <div class="card-title">&#128247; One-Click - Photo Straight to Report</div>
+      <div class="ai-zone" style="margin-bottom:0;">
+        <div class="ai-zone-title">Add the production sheet photo and the report is built</div>
+        <div class="info-box" style="font-size:11px;">Date and shift are read from the sheet heading, the previous shift&rsquo;s running totals are taken from the last report this device generated, and the finished report opens straight away - no key entry and no button sequence. Add every page for a multi-page sheet; drop a SAP screenshot in the breakdown box below too if you want downtime read in the same pass.</div>
+        <button class="btn btn-ai" id="oneclick-btn">&#128247; ADD PHOTO &amp; BUILD REPORT</button>
+        <input type="file" id="oneclick-img" accept="image/*" multiple style="display:none;">
+        <div class="thumb-strip" id="oneclick-preview"></div>
+        <div class="upload-foot">
+          <span class="file-count" id="oneclick-count">No photos</span>
+          <button class="btn btn-danger btn-sm" id="oneclick-clear" style="display:none;">CLEAR</button>
+        </div>
+        <div class="extract-status" id="oneclick-status" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">Step 1 - Paste Previous Shift Report</div>
       <label>Previous Shift Report</label>
       <textarea id="prev-report-input" rows="10" placeholder="Paste the previous shift report here..."></textarea>
@@ -214,6 +229,7 @@ textarea{resize:vertical;min-height:80px;}
           <button class="btn btn-primary" id="copy-btn">&#128203; COPY REPORT</button>
           <span class="copy-flash" id="copy-flash">Copied!</span>
         </div>
+        <button class="btn btn-secondary" id="oneclick-review-btn" style="display:none;">&#128269; CHECK READINGS</button>
         <button class="btn btn-secondary" id="edit-btn">&#8592; EDIT SECTIONS</button>
         <button class="btn btn-secondary" id="reset-btn">&#8635; NEW REPORT</button>
       </div>
@@ -428,6 +444,55 @@ async function clearSavedState() {
   try { localStorage.removeItem('ars_report_gas_backup'); } catch (e) {}
 }
 
+// ===== REPORT ARCHIVE =====
+// Every finished report is kept so the next shift can be built from a single
+// photo: one-click needs the previous shift's running totals and there is no
+// paste step in that flow. Newest first, one entry per date+shift.
+const REPORT_ARCHIVE_KEY = 'ars_report_archive_v1';
+
+function loadReportArchive() {
+  try {
+    var arr = JSON.parse(localStorage.getItem(REPORT_ARCHIVE_KEY) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+
+function archiveReport(entry) {
+  if (!entry || !entry.date || !entry.text) return false;
+  var key = entry.date + '|' + (entry.shift || '');
+  var arr = loadReportArchive().filter(function(r){
+    return r && (r.date + '|' + (r.shift || '')) !== key;
+  });
+  arr.unshift({ date: entry.date, shift: entry.shift || '', text: entry.text, at: Date.now() });
+  try {
+    localStorage.setItem(REPORT_ARCHIVE_KEY, JSON.stringify(arr.slice(0, 40)));
+    return true;
+  } catch (e) { return false; }
+}
+
+function lookupArchivedReport(date, shift) {
+  if (!date) return '';
+  var want = date + '|' + (shift || '');
+  var hit = loadReportArchive().filter(function(r){
+    return r && (r.date + '|' + (r.shift || '')) === want;
+  })[0];
+  return hit ? String(hit.text || '') : '';
+}
+
+// The report for the shift before `date`/`shift`: this device's archive first,
+// then whatever is sitting in the paste box if it happens to be that shift.
+function findPrevReport(date, shift, pastedText) {
+  var prev = prevShiftOf(date, shift);
+  if (!prev) return '';
+  var archived = lookupArchivedReport(prev.date, prev.shift);
+  if (archived) return archived;
+  var txt = String(pastedText || '').trim();
+  if (!txt) return '';
+  var pDate = normSheetDate(extractDateFromReport(txt));
+  var pShift = normSheetShift(extractShiftFromReport(txt));
+  return (pDate === prev.date && pShift === prev.shift) ? txt : '';
+}
+
 async function checkAndRestoreState() {
   let raw = null;
   try {
@@ -564,6 +629,46 @@ function nextShiftCalc(prevDate, prevShift) {
   return { nextDate: dd+'/'+mm+'/'+dt.getFullYear(), nextShift: ns };
 }
 
+// ===== ONE-CLICK HELPERS (sheet heading + previous-shift lookup) =====
+// The photographed sheet carries its own date/shift heading, which beats the
+// wall clock for deciding what report we are writing, so accept the messy
+// shapes a shop-floor form actually uses (28/9/26, 28-09-2026, 28.09.2026).
+function normSheetDate(s) {
+  if (!s) return null;
+  var m = String(s).match(/(\d{1,4})[\s.\/\-]+(\d{1,2})[\s.\/\-]+(\d{1,4})/);
+  if (!m) return null;
+  var a = parseInt(m[1], 10), mo = parseInt(m[2], 10), c = parseInt(m[3], 10);
+  var d, y;
+  if (a > 31) { y = a; d = c; }   // year-first: 2026-09-28
+  else { d = a; y = c; }          // day-first, as the sheet writes it: 28/09/2026
+  if (y < 100) y += 2000;
+  if (!d || d > 31 || !mo || mo > 12) return null;
+  return String(d).padStart(2, '0') + '/' + String(mo).padStart(2, '0') + '/' + y;
+}
+
+function normSheetShift(s) {
+  if (!s) return null;
+  var m = String(s).match(/\b([ABC])\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+// The shift immediately before the given one. A follows C of the previous day,
+// so only stepping back into C rolls the date backwards.
+function prevShiftOf(date, shift) {
+  var order = ['A', 'B', 'C'];
+  var i = order.indexOf(String(shift || '').toUpperCase());
+  if (i === -1) return null;
+  var p = String(date || '').split('/').map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return null;
+  var dt = new Date(p[2], p[1] - 1, p[0]);
+  var ps = order[(i + 2) % 3];
+  if (ps === 'C') dt.setDate(dt.getDate() - 1);
+  return {
+    date: String(dt.getDate()).padStart(2, '0') + '/' + String(dt.getMonth() + 1).padStart(2, '0') + '/' + dt.getFullYear(),
+    shift: ps
+  };
+}
+
 function to12hr(hhmm) {
   var p = hhmm.split(':').map(Number);
   var ap = p[0] >= 12 ? 'PM' : 'AM';
@@ -591,6 +696,73 @@ function goPhase(n) {
   persistState();
 }
 
+// ===== PREVIOUS-SHIFT CONTEXT =====
+// Shared by the paste box and by one-click, which feeds this the report the
+// device archived for the previous shift. Returns { ok:false } when the text
+// carries no date/shift, so each caller decides how loudly to complain.
+function setReportingShift(date, shift) {
+  S.nextDate = date;
+  S.nextShift = shift;
+  el('header-shift').textContent = date + ' / ' + shift;
+  el('shift-info-box').textContent =
+    'Generating for: Date ' + date + '  |  Shift ' + shift +
+    '  |  Prev Tanker Cum: ' + S.prevTankerCum +
+    '  |  Prev Bath Cum: ' + S.prevBathCum;
+}
+
+function resetSectionData() {
+  S.data = {};
+  S.inputs = {};
+  SECTIONS.forEach(function(sec){ S.data[sec] = null; });
+  S.ars3RaFtd = 0;
+  S.roddedAnodesCum = 0;
+}
+
+function applyPrevContext(txt) {
+  var prevDate = extractDateFromReport(txt);
+  var prevShiftRaw = extractShiftFromReport(txt);
+  if (!prevDate || !prevShiftRaw) return { ok: false };
+
+  var newPrevDate = prevDate;
+  var newPrevShift = prevShiftRaw.toUpperCase();
+  var isSameShift = (S.prevDate === newPrevDate && S.prevShift === newPrevShift);
+
+  S.prevReportRaw = txt;
+  S.prevDate  = newPrevDate;
+  S.prevShift = newPrevShift;
+
+  var ns = nextShiftCalc(S.prevDate, S.prevShift);
+  S.nextDate  = ns.nextDate;
+  S.nextShift = ns.nextShift;
+
+  S.prevTankerCum   = xInt(/Tankers?\s*\(cumulative\)\s*[-:]*\s*(\d+)/i, txt);
+  S.prevBathCum     = xInt(/Cumulative\s*bath\s*[-:]*\s*(\d+)/i, txt);
+  S.prevRoddedAnode = xInt(/Rodded\s*anodes?\s*\(Cumulative\)\s*[-:]*\s*(\d+)/i, txt);
+
+  var m;
+  m = txt.match(/RA\s*production[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+  S.prevArs3Ra = m ? parseInt(m[1]) : 0;
+  m = txt.match(/SA\s*processed[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+  S.prevArs3Sa = m ? parseInt(m[1]) : 0;
+  m = txt.match(/BA\s*received[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
+  S.prevArs3Ba = m ? parseInt(m[1]) : 0;
+
+  m = txt.match(/[*]?FURNACE[*]?\s*([\s\S]*?)(?=[*]?Regards[*]?|$)/i);
+  S.furnaceContent = m ? m[1].trim() : '';
+  m = txt.match(/[*]?VEHICLES[*]?\s*([\s\S]*?)\s*(?=[*]?FURNACE[*]?|$)/i);
+  var vc = m ? m[1].trim() : '';
+  if (vc) vc = vc.replace(/\./g,'\n').replace(/\u2022/g,'\n\u2022');
+  S.vehicleContent = vc;
+
+  if (!isSameShift) resetSectionData();
+
+  setReportingShift(S.nextDate, S.nextShift);
+  renderGrid();
+  renderPreview();
+  persistState();
+  return { ok: true, isSameShift: isSameShift, nextDate: S.nextDate, nextShift: S.nextShift };
+}
+
 // ===== PARSE BUTTON =====
 el('parse-btn').addEventListener('click', function() {
   try {
@@ -600,62 +772,12 @@ el('parse-btn').addEventListener('click', function() {
       return; 
     }
 
-    var prevDate = extractDateFromReport(txt);
-    var prevShiftRaw = extractShiftFromReport(txt);
-
-    if (!prevDate || !prevShiftRaw) {
+    var res = applyPrevContext(txt);
+    if (!res.ok) {
       alert('Could not find Date or Shift in the pasted report.\n\nMake sure it contains lines like:\n*Date:-DD/MM/YYYY*\n*Shift:-A*');
       return;
     }
 
-    var newPrevDate = prevDate;
-    var newPrevShift = prevShiftRaw.toUpperCase();
-    var isSameShift = (S.prevDate === newPrevDate && S.prevShift === newPrevShift);
-
-    S.prevReportRaw = txt;
-    S.prevDate  = newPrevDate;
-    S.prevShift = newPrevShift;
-
-    var ns = nextShiftCalc(S.prevDate, S.prevShift);
-    S.nextDate  = ns.nextDate;
-    S.nextShift = ns.nextShift;
-
-    S.prevTankerCum   = xInt(/Tankers?\s*\(cumulative\)\s*[-:]*\s*(\d+)/i, txt);
-    S.prevBathCum     = xInt(/Cumulative\s*bath\s*[-:]*\s*(\d+)/i, txt);
-    S.prevRoddedAnode = xInt(/Rodded\s*anodes?\s*\(Cumulative\)\s*[-:]*\s*(\d+)/i, txt);
-
-    var m;
-    m = txt.match(/RA\s*production[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
-    S.prevArs3Ra = m ? parseInt(m[1]) : 0;
-    m = txt.match(/SA\s*processed[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
-    S.prevArs3Sa = m ? parseInt(m[1]) : 0;
-    m = txt.match(/BA\s*received[\s\S]*?FTS\s*\/\s*FTD[\s\S]*?\d+\s*\/\s*(\d+)/i);
-    S.prevArs3Ba = m ? parseInt(m[1]) : 0;
-
-    m = txt.match(/[*]?FURNACE[*]?\s*([\s\S]*?)(?=[*]?Regards[*]?|$)/i);
-    S.furnaceContent = m ? m[1].trim() : '';
-    m = txt.match(/[*]?VEHICLES[*]?\s*([\s\S]*?)\s*(?=[*]?FURNACE[*]?|$)/i);
-    var vc = m ? m[1].trim() : '';
-    if (vc) vc = vc.replace(/\./g,'\n').replace(/\u2022/g,'\n\u2022');
-    S.vehicleContent = vc;
-
-    if (!isSameShift) {
-      S.data = {};
-      S.inputs = {};
-      SECTIONS.forEach(function(sec){ S.data[sec] = null; });
-      S.ars3RaFtd = 0;
-      S.roddedAnodesCum = 0;
-    }
-
-    el('header-shift').textContent = S.nextDate + ' / ' + S.nextShift;
-    el('shift-info-box').textContent =
-      'Generating for: Date ' + S.nextDate + '  |  Shift ' + S.nextShift +
-      '  |  Prev Tanker Cum: ' + S.prevTankerCum +
-      '  |  Prev Bath Cum: ' + S.prevBathCum;
-
-    renderGrid();
-    renderPreview();
-    persistState();
     goPhase(2);
   } catch(err) {
     alert("Error while parsing: " + err.message);
@@ -686,6 +808,13 @@ el('reset-btn').addEventListener('click', async function(){
     S.activeModal = null;
     el('prev-report-input').value = '';
     el('header-shift').textContent = '-- / --';
+    AI_ONECLICK_DRAFT = null;
+    AI_IMG.oneclick = [];
+    AI_IMG.prod = [];
+    renderThumbs('oneclick');
+    renderThumbs('prod');
+    oneClickStatus('', '');
+    el('oneclick-review-btn').style.display = 'none';
     renderResumeBanner();
     goPhase(1);
   }
@@ -738,8 +867,19 @@ const MAX_IMAGES_PER_REQUEST = 3;
 const MAX_IMAGE_EDGE = 1800;
 const JPEG_QUALITY = 0.82;
 
-var AI_IMG = { prod: [], bd: [] };
+var AI_IMG = { prod: [], bd: [], oneclick: [] };
 var AI_DRAFT = null;   // { merged, raw, snapshot, notes }
+var AI_ONECLICK_DRAFT = null;  // last one-click read, kept for "check readings"
+
+// Key source for both the manual and the one-click path: the secret baked in at
+// deploy time wins, otherwise whatever this browser saved. No typing needed on
+// the deployed site.
+function getGroqKey() {
+  if (INJECTED_KEY && !INJECTED_KEY.startsWith('__')) return INJECTED_KEY;
+  var fromInput = el('groq-key-input') ? el('groq-key-input').value.trim() : '';
+  try { return localStorage.getItem('ars_groq_api_key') || fromInput; }
+  catch (e) { return fromInput; }
+}
 
 el('key-cfg-btn').addEventListener('click', function(){
   var wrap = el('key-config-wrap');
@@ -810,6 +950,7 @@ function setupImageUpload(kind, inputId) {
 }
 setupImageUpload('prod', 'prod-img');
 setupImageUpload('bd', 'bd-img');
+setupImageUpload('oneclick', 'oneclick-img');
 
 function getCompressedBase64(file, maxDimension, quality) {
   maxDimension = maxDimension || MAX_IMAGE_EDGE;
@@ -955,6 +1096,23 @@ function mergeExtraction(base, extra) {
     }
   });
 
+  // Sheet heading (date/shift). The first page that shows one wins, since the
+  // heading usually sits at the top of page 1. Two pages that disagree decide
+  // which shift the whole report is filed under, so say so instead of picking
+  // silently - one-click applies the result without a review stop.
+  if (extra.sheet && typeof extra.sheet === 'object') {
+    base.sheet = base.sheet || {};
+    ['date', 'shift'].forEach(function(k){
+      var v = (extra.sheet[k] === undefined || extra.sheet[k] === null) ? '' : String(extra.sheet[k]).trim();
+      if (!v) return;
+      if (!base.sheet[k]) { base.sheet[k] = v; return; }
+      if (String(base.sheet[k]).toLowerCase() !== v.toLowerCase()) {
+        var clash = 'sheet heading disagrees between pages: ' + base.sheet[k] + ' vs ' + v;
+        base.notes = base.notes ? base.notes + '\n' + clash : clash;
+      }
+    });
+  }
+
   if (Array.isArray(extra.events)) {
     base.events = base.events || [];
     extra.events.forEach(function(ev){
@@ -1012,9 +1170,11 @@ const PROD_PROMPT = [
   '- Read ONLY what is actually visible. Never guess, infer or carry values over from another field.',
   '- Use an empty string "" for anything not visible on the sheet.',
   '- Copy values verbatim as written, including units, slashes and "p" suffixes (e.g. "100p").',
+  '- "sheet" describes the heading of the photographed sheet itself: its date and the shift it covers. Copy the date exactly as written; never use today\'s date and never infer a shift from times on the sheet.',
   '',
   'Return ONLY a JSON object of this exact shape:',
   '{',
+  '  "sheet": { "date": "<sheet date as written, e.g. 28/09/2026>", "shift": "<A or B or C>" },',
   '  "ars2": { "lul": "<target>/<actual> exactly as written, e.g. 800/800 or 100p, 100p", "ab": "<AB count>", "bp": "<BP count>", "rr": "<RR/RH/SS/RS, e.g. 2/1/0/0>", "ra": "<rodded anodes exactly as written, e.g. 120 or 120,130 for CM1/CM2>" },',
   '  "ars3": { "ars3ra": "<RA production FTS>", "ars3sa": "<SA processed FTS>", "ars3ba": "<BA received sets FTS>" },',
   '  "bath": { "bathprod": "<bath production mt>", "tanker": "<tankers sent>", "bathstock": "<RBS1/RBS2/F1/F2/F3/F4 in that order>" },',
@@ -1350,8 +1510,10 @@ el('review-undo-btn').addEventListener('click', function(){
 });
 
 // ---------- APPLY ----------
-el('review-apply-btn').addEventListener('click', function(){
-  if (!AI_DRAFT) return;
+// Writes the review panel's current values into the report sections. Shared by
+// the Apply button and by one-click so both paths write exactly the same way.
+function applyExtractedDraft() {
+  if (!AI_DRAFT) return [];
 
   // Snapshot first, so a bad extraction can be rolled back in one click.
   AI_LAST_SNAPSHOT = {
@@ -1470,13 +1632,14 @@ el('review-apply-btn').addEventListener('click', function(){
   setStatus(touched.length
     ? 'Applied to: ' + touched.join(', ') + '. Open any section to correct a value.'
     : 'Nothing to apply - no values were filled in.', touched.length ? 'ok' : 'err');
-});
+  return touched;
+}
+
+el('review-apply-btn').addEventListener('click', function(){ applyExtractedDraft(); });
 
 // ---------- MAIN EXTRACT ----------
 el('ai-process-btn').addEventListener('click', async function(){
-  var apiKey = (INJECTED_KEY && !INJECTED_KEY.startsWith('__'))
-    ? INJECTED_KEY
-    : (localStorage.getItem('ars_groq_api_key') || el('groq-key-input').value.trim());
+  var apiKey = getGroqKey();
 
   if (!apiKey) {
     el('key-config-wrap').style.display = 'block';
@@ -1526,6 +1689,137 @@ el('ai-process-btn').addEventListener('click', async function(){
     btn.disabled = false;
     el('ai-loader').classList.remove('active');
   }
+});
+
+// ---------- ONE-CLICK: PHOTO STRAIGHT TO REPORT ----------
+// Pick the sheet photo and everything else is automatic: the figures, the date
+// and shift read off the sheet heading, the previous shift's running totals
+// from this device's archive, and the finished report. The review panel is
+// still filled in, so a mis-read can be corrected without running it again.
+function oneClickStatus(msg, kind) {
+  var box = el('oneclick-status');
+  if (!box) return;
+  box.style.display = msg ? 'block' : 'none';
+  box.className = 'extract-status' + (kind ? ' ' + kind : '');
+  box.textContent = msg || '';
+}
+
+async function runOneClick() {
+  var btn = el('oneclick-btn');
+  var items = (AI_IMG.oneclick || []).slice();
+
+  if (!items.length) {
+    oneClickStatus('Nothing to read - add a photo of the production sheet first.', 'err');
+    return;
+  }
+
+  var apiKey = getGroqKey();
+  if (!apiKey) {
+    oneClickStatus('No Groq key on this device. Open the API Key button in the AI panel below, save a gsk_... key once, then run this again - one-click uses it silently from then on.', 'err');
+    el('key-config-wrap').style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  var notes = [];
+  var rawParts = [];
+  var merged = {};
+
+  try {
+    oneClickStatus('Reading ' + items.length + ' photo(s) with Vision AI\u2026');
+    var pr = await runExtraction(apiKey, 'One-click', PROD_PROMPT, items, oneClickStatus);
+    merged = mergeExtraction(merged, pr.merged);
+    rawParts.push('===== PRODUCTION (' + pr.model + ') =====\n' + pr.raw);
+    if (pr.merged.notes) notes.push('Production: ' + pr.merged.notes);
+
+    // Breakdown screenshots staged in the AI panel ride along in the same run.
+    if (AI_IMG.bd.length) {
+      oneClickStatus('Reading ' + AI_IMG.bd.length + ' breakdown screenshot(s)\u2026');
+      var br = await runExtraction(apiKey, 'Breakdown', BD_PROMPT, AI_IMG.bd, oneClickStatus);
+      merged = mergeExtraction(merged, br.merged);
+      rawParts.push('===== BREAKDOWN (' + br.model + ') =====\n' + br.raw);
+      if (br.merged.notes) notes.push('Breakdown: ' + br.merged.notes);
+    }
+
+    // The sheet heading decides which shift we are writing; the clock is backup.
+    var sheetDate = normSheetDate(merged.sheet && merged.sheet.date);
+    var sheetShift = normSheetShift(merged.sheet && merged.sheet.shift);
+    delete merged.sheet;
+    if (!sheetDate || !sheetShift) {
+      notes.push('Sheet heading not readable - date/shift taken from the device clock. Check it before sending.');
+    }
+    var wantDate = sheetDate || getAutoDate();
+    var wantShift = sheetShift || getAutoShift();
+
+    var anyValue = Object.keys(merged).some(function(k){ return k !== 'notes'; });
+    if (!anyValue) {
+      oneClickStatus('The model ran but read no figures. Try a sharper, better-lit photo, or add the remaining pages.', 'err');
+      return;
+    }
+
+    var prevTxt = findPrevReport(wantDate, wantShift, el('prev-report-input').value);
+    var ctx = prevTxt ? applyPrevContext(prevTxt) : { ok: false };
+    if (ctx.ok) {
+      // Show which report the totals came from, so the paste box is never a
+      // mystery source half-way through a one-click run.
+      el('prev-report-input').value = prevTxt;
+      if (S.nextDate !== wantDate || S.nextShift !== wantShift) {
+        // The archive implied a different shift than the sheet heading states.
+        var derivedDate = S.nextDate, derivedShift = S.nextShift;
+        setReportingShift(wantDate, wantShift);
+        notes.push('The sheet is dated ' + wantDate + ' Shift ' + wantShift + ' but ' + prevTxt.split('\n')[0] +
+          ' implies ' + derivedDate + ' Shift ' + derivedShift + ' - the sheet wins, check the totals.');
+      }
+    } else {
+      var pp = prevShiftOf(wantDate, wantShift);
+      S.prevDate = pp ? pp.date : null;
+      S.prevShift = pp ? pp.shift : null;
+      S.prevTankerCum = 0; S.prevBathCum = 0; S.prevRoddedAnode = 0;
+      S.prevArs3Ra = 0; S.prevArs3Sa = 0; S.prevArs3Ba = 0;
+      if (S.nextDate !== wantDate || S.nextShift !== wantShift) resetSectionData();
+      setReportingShift(wantDate, wantShift);
+      notes.push('No archived report for ' + (pp ? pp.date + ' Shift ' + pp.shift : 'the previous shift') +
+        ' on this device, so the bath / tanker / rodded-anode running totals start from this shift only.' +
+        ' Paste the previous report in Step 1 and press PARSE to bring them in.');
+    }
+
+    var rawAll = rawParts.join('\n\n');
+    openReview(merged, rawAll, notes.join('\n'));
+    el('review-card').style.display = 'none';   // values are applied below, panel kept for corrections
+    var touched = applyExtractedDraft();
+    generateReport();
+
+    AI_ONECLICK_DRAFT = { merged: merged, raw: rawAll, notes: notes.join('\n') };
+    el('oneclick-review-btn').style.display = 'inline-flex';
+
+    // Consumed, so a repeat run never silently re-reads the same photos.
+    AI_IMG.oneclick = [];
+    renderThumbs('oneclick');
+
+    // One-click skips the review gate, so anything the model was unsure about
+    // has to be said out loud here instead of hidden in the panel.
+    oneClickStatus('Report built for ' + wantDate + ' - Shift ' + wantShift + ' from ' + items.length +
+      ' photo(s)' + (prevTxt ? ', with the previous shift totals.' : ' (no previous-shift totals found).') +
+      ' Written: ' + (touched.length ? touched.join(', ') : 'nothing - every box came back empty') + '.' +
+      (notes.length
+        ? '\nFlagged: ' + notes.join(' | ') + '\nPress CHECK READINGS to correct a value before sending.'
+        : '\nNothing was flagged. Press CHECK READINGS to skim the values.'), touched.length ? 'ok' : 'err');
+  } catch (error) {
+    oneClickStatus('One-click failed:\n' + groqErrorFriendly(error), 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+el('oneclick-btn').addEventListener('click', function(){ el('oneclick-img').click(); });
+el('oneclick-img').addEventListener('change', function(){
+  if (this.files && this.files.length) runOneClick();
+});
+el('oneclick-review-btn').addEventListener('click', function(){
+  goPhase(2);
+  if (!AI_ONECLICK_DRAFT) return;
+  openReview(AI_ONECLICK_DRAFT.merged, AI_ONECLICK_DRAFT.raw, AI_ONECLICK_DRAFT.notes);
+  setStatus('Fix anything the model mis-read, then press APPLY TO SECTIONS - the report below updates with it.', '');
 });
 
 // ===== GRID & PREVIEW =====
@@ -2185,6 +2479,8 @@ function generateReport() {
   });
   report += 'Regards\nOmkar & Santanu\n';
   el('report-output').textContent = report;
+  // Kept so the next shift's one-click run can pick up the running totals.
+  archiveReport({ date: S.nextDate, shift: S.nextShift, text: report });
   goPhase(3);
 }
 
