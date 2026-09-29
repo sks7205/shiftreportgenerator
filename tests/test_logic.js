@@ -25,7 +25,8 @@ function grab(name) {
 
 const need = ['normTime','breakdownDeviations','formatBreakdownEvent','normaliseBreakdowns',
   'fmtLulDisplay','fmtRoddedAnodes','saCount','mergeExtraction','mergeNumericSection','parseLooseJson',
-  'chunk','shiftWindowForDate','matchTimePair'];
+  'chunk','shiftWindowForDate','matchTimePair',
+  'normSheetDate','normSheetShift','prevShiftOf','nextShiftCalc'];
 const regexConsts = (src.match(/var TIME_PAIR_RE = [\s\S]*?var TIME_ADJ_RE = [^\n]*/) || [''])[0];
 if (!regexConsts) throw new Error('time regex constants not found');
 const code = regexConsts + '\n\n' + need.map(grab).join('\n\n');
@@ -47,7 +48,7 @@ function to12hr(hhmm) {
   return h12 + ':' + String(p[1]).padStart(2, '0') + ap;
 }
 
-const api = eval('(function(Date){' + code + '\n;return {normTime,breakdownDeviations,formatBreakdownEvent,normaliseBreakdowns,fmtLulDisplay,fmtRoddedAnodes,saCount,mergeExtraction,parseLooseJson,chunk,shiftWindowForDate,matchTimePair};})')(FakeDate);
+const api = eval('(function(Date){' + code + '\n;return {normTime,breakdownDeviations,formatBreakdownEvent,normaliseBreakdowns,fmtLulDisplay,fmtRoddedAnodes,saCount,mergeExtraction,parseLooseJson,chunk,shiftWindowForDate,matchTimePair,normSheetDate,normSheetShift,prevShiftOf,nextShiftCalc};})')(FakeDate);
 
 let pass = 0, fail = 0;
 function eq(label, got, want) {
@@ -141,6 +142,56 @@ eq('fenced', api.parseLooseJson('```json\n{"a":2}\n```'), { a: 2 });
 eq('prose-wrapped', api.parseLooseJson('Here you go: {"a":3} hope that helps'), { a: 3 });
 try { api.parseLooseJson('no json at all'); fail++; console.log('  FAIL non-JSON should throw'); }
 catch (e) { if (/did not return valid JSON/.test(e.message)) { pass++; console.log('  ok   non-JSON throws readable error'); } else { fail++; console.log('  FAIL wrong error: ' + e.message); } }
+
+console.log('--- sheet heading survives the batch merge (first page wins) ---');
+eq('heading kept across batches',
+  api.mergeExtraction(api.mergeExtraction({}, { sheet: { date: '28/09/2026', shift: 'B' }, ars2: { bp: '22' } }), { sheet: { date: '28/09/2026', shift: 'B' } }),
+  { ars2: { bp: '22' }, sheet: { date: '28/09/2026', shift: 'B' } });
+eq('page 2 can supply a cropped heading',
+  api.mergeExtraction({ sheet: { date: '', shift: '' } }, { sheet: { date: '28/09/2026', shift: 'C' } }).sheet,
+  { date: '28/09/2026', shift: 'C' });
+const clash = api.mergeExtraction({ sheet: { date: '28/09/2026', shift: 'B' } }, { sheet: { date: '29/09/2026', shift: 'B' } });
+eq('disagreement does not overwrite', clash.sheet.date, '28/09/2026');
+eq('disagreement is flagged for the operator',
+  /sheet heading disagrees between pages: 28\/09\/2026 vs 29\/09\/2026/.test(String(clash.notes)), true);
+eq('null sheet ignored', api.mergeExtraction({ ars2: { bp: '1' } }, { sheet: null }).sheet, undefined);
+
+console.log('--- one-click: sheet heading readers and the shift that precedes ---');
+eq('slash date', api.normSheetDate('28/09/2026'), '28/09/2026');
+eq('single digit padded', api.normSheetDate('28/9/2026'), '28/09/2026');
+eq('2-digit year', api.normSheetDate('28/9/26'), '28/09/2026');
+eq('dashes', api.normSheetDate('28-09-2026'), '28/09/2026');
+eq('dots', api.normSheetDate('28.09.2026'), '28/09/2026');
+eq('labelled heading', api.normSheetDate('Date:- 28/09/2026'), '28/09/2026');
+eq('month 13 rejected', api.normSheetDate('28/13/2026'), null);
+eq('day 40 rejected', api.normSheetDate('40/09/2026'), null);
+eq('year-first tolerated', api.normSheetDate('2026-09-28'), '28/09/2026');
+eq('US-style not guessed', api.normSheetDate('9/28/2026'), null);
+eq('no date', api.normSheetDate('yesterday'), null);
+eq('empty', api.normSheetDate(''), null);
+eq('bare letter', api.normSheetShift('B'), 'B');
+eq('lower case', api.normSheetShift('c'), 'C');
+eq('worded', api.normSheetShift('Shift A'), 'A');
+eq('labelled', api.normSheetShift('Shift:- B'), 'B');
+eq('not a shift letter', api.normSheetShift('morning'), null);
+eq('empty shift', api.normSheetShift(''), null);
+eq('B follows A same day', api.prevShiftOf('28/09/2026','B'), { date:'28/09/2026', shift:'A' });
+eq('C follows B same day', api.prevShiftOf('28/09/2026','C'), { date:'28/09/2026', shift:'B' });
+eq('A follows C of yesterday', api.prevShiftOf('28/09/2026','A'), { date:'27/09/2026', shift:'C' });
+eq('case tolerant', api.prevShiftOf('28/09/2026','a'), { date:'27/09/2026', shift:'C' });
+eq('month start rolls back', api.prevShiftOf('01/10/2026','A'), { date:'30/09/2026', shift:'C' });
+eq('leap day rolls back', api.prevShiftOf('01/03/2028','A'), { date:'29/02/2028', shift:'C' });
+eq('unknown shift', api.prevShiftOf('28/09/2026','D'), null);
+eq('bad date', api.prevShiftOf('28-09-2026','A'), null);
+// prevShiftOf must be the exact inverse of nextShiftCalc, or the archive lookup
+// misses the previous report and the running totals silently restart at zero.
+for (const d of ['28/09/2026','01/10/2026','31/12/2026','01/01/2027']) {
+  for (const sh of ['A','B','C']) {
+    const nx = api.nextShiftCalc(d, sh);
+    const back = api.prevShiftOf(nx.nextDate, nx.nextShift);
+    eq('inverse ' + d + ' ' + sh, back, { date: d, shift: sh });
+  }
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

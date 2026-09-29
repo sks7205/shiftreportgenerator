@@ -4,7 +4,7 @@
   "private": true,
   "description": "ARS-2 shift report generator with Groq vision extraction for production and breakdown sheets",
   "scripts": {
-    "test": "node tests/test_logic.js && node tests/test_e2e.js && node tests/test_errors.js"
+    "test": "node tests/test_logic.js && node tests/test_e2e.js && node tests/test_errors.js && node tests/test_oneclick.js"
   },
   "devDependencies": {
     "jsdom": "^26.0.0"
