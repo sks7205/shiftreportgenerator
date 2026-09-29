@@ -42,18 +42,18 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Assemble site
+        # upload-pages-artifact v3 has no 'exclude' input, so stage the
+        # publishable site explicitly instead of uploading the whole repo.
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload the site itself; tests and dev config are not part of the page
-          path: '.'
-          exclude: |
-            .github
-            .gitignore
-            package.json
-            package-lock.json
-            node_modules
-            tests
+          # Only the staged site - tests and dev config stay out of Pages
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         id: deployment
