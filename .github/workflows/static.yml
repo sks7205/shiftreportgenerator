@@ -45,8 +45,15 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
+          # Upload the site itself; tests and dev config are not part of the page
           path: '.'
+          exclude: |
+            .github
+            .gitignore
+            package.json
+            package-lock.json
+            node_modules
+            tests
 
       - name: Deploy to GitHub Pages
         id: deployment
