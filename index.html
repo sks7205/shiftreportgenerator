@@ -141,24 +141,25 @@ textarea{resize:vertical;min-height:80px;}
       </div>
       <div class="info-box" id="shift-info-box">Loading...</div>
       
-      <!-- AI Zone Direct Client-Side Groq -->
+      <!-- AI Zone - Arena agent vision -->
       <div class="ai-zone">
         <div class="loader-overlay" id="ai-loader">
           <div class="spinner"></div>
-          <div id="ai-loader-msg" style="font-size:12px;font-weight:700;color:var(--accent2);">Extracting directly with Vision AI...</div>
+          <div id="ai-loader-msg" style="font-size:12px;font-weight:700;color:var(--accent2);">Reading the sheet with the Arena agent...</div>
         </div>
 
         <div class="ai-zone-title" style="justify-content:space-between;">
-          <span>&#10024; AI Auto-Extract (Direct Groq Vision)</span>
+          <span>&#10024; AI Auto-Extract (Arena Agent Vision)</span>
           <button class="btn btn-secondary btn-sm" id="key-cfg-btn" style="padding:2px 8px; font-size:10px;">⚙️ API Key</button>
         </div>
 
         <div id="key-config-wrap" style="display:none; background:var(--surface2); padding:10px; border-radius:6px; margin-bottom:12px; border:1px solid var(--border);">
-          <label style="font-size:11px;">Groq API Key (Or injected via GitHub Secret)</label>
+          <label style="font-size:11px;">Arena API Key (Or injected via GitHub Secret)</label>
           <div style="display:flex; gap:8px;">
-            <input type="password" id="groq-key-input" placeholder="gsk_..." style="margin-bottom:0;">
+            <input type="password" id="arena-key-input" placeholder="Paste your Arena API key" style="margin-bottom:0;">
             <button class="btn btn-primary btn-sm" id="save-key-btn">Save Key</button>
           </div>
+          <div style="font-size:10px; color:var(--muted); margin-top:6px; font-family:monospace;">Reads sheet photos through the Arena gateway (api.preview.arena.ai) with model coding-router-preview.</div>
         </div>
         
         <div class="upload-grid">
@@ -851,18 +852,26 @@ el('preview-toggle-btn').addEventListener('click', function(){
   this.textContent = hidden ? 'HIDE' : 'SHOW';
 });
 
-// ===== DIRECT CLIENT-SIDE VISION EXTRACTION (GROQ API) =====
+// ===== VISION EXTRACTION VIA THE ARENA AGENT (ARENA GATEWAY) =====
 // Two independent passes: PRODUCTION sheet and SAP BREAKDOWN log.
 // Each pass gets its own focused prompt, is batched 3 images per request
-// (Groq vision limit) and is merged. Nothing is written to the report
-// until the operator reviews the result in the review panel.
-const INJECTED_KEY = "__GROQ_API_KEY__";
-const STORED_KEY = localStorage.getItem('ars_groq_api_key') || '';
-if(STORED_KEY) el('groq-key-input').value = STORED_KEY;
+// and is merged. Nothing is written to the report until the operator
+// reviews the result in the review panel.
+const INJECTED_KEY = "__ARENA_API_KEY__";
+const STORED_KEY = localStorage.getItem('ars_arena_api_key') || '';
+if(STORED_KEY) el('arena-key-input').value = STORED_KEY;
 
-// Groq retires vision models quickly - try these in order and stick with
-// whichever one answers. llama-3.2-11b-vision was decommissioned 14 Apr 2025.
-const GROQ_MODELS = ['qwen/qwen3.8-27b', 'meta-llama/llama-4-scout-17b-16e-instruct'];
+// The Arena gateway is OpenAI-compatible. Arena plans that are on the coding
+// router reject direct model ids with a 403, so the router alias is what the
+// app names by default; a key that names its own model can be pointed at one
+// by saving it in localStorage under ars_arena_model.
+const ARENA_ENDPOINT = 'https://api.preview.arena.ai/v1/chat/completions';
+const ARENA_MODELS = ['coding-router-preview'];
+const ARENA_MODEL_OVERRIDE = (function(){
+  try { return (localStorage.getItem('ars_arena_model') || '').trim(); } catch (e) { return ''; }
+})();
+if (ARENA_MODEL_OVERRIDE) ARENA_MODELS.unshift(ARENA_MODEL_OVERRIDE);
+
 const MAX_IMAGES_PER_REQUEST = 3;
 const MAX_IMAGE_EDGE = 1800;
 const JPEG_QUALITY = 0.82;
@@ -874,10 +883,10 @@ var AI_ONECLICK_DRAFT = null;  // last one-click read, kept for "check readings"
 // Key source for both the manual and the one-click path: the secret baked in at
 // deploy time wins, otherwise whatever this browser saved. No typing needed on
 // the deployed site.
-function getGroqKey() {
+function getArenaKey() {
   if (INJECTED_KEY && !INJECTED_KEY.startsWith('__')) return INJECTED_KEY;
-  var fromInput = el('groq-key-input') ? el('groq-key-input').value.trim() : '';
-  try { return localStorage.getItem('ars_groq_api_key') || fromInput; }
+  var fromInput = el('arena-key-input') ? el('arena-key-input').value.trim() : '';
+  try { return localStorage.getItem('ars_arena_api_key') || fromInput; }
   catch (e) { return fromInput; }
 }
 
@@ -887,14 +896,14 @@ el('key-cfg-btn').addEventListener('click', function(){
 });
 
 el('save-key-btn').addEventListener('click', function(){
-  var k = el('groq-key-input').value.trim();
+  var k = el('arena-key-input').value.trim();
   if(!k) {
-    alert("Please enter a valid Groq API key.");
+    alert("Please enter your Arena API key.");
     return;
   }
-  localStorage.setItem('ars_groq_api_key', k);
+  localStorage.setItem('ars_arena_api_key', k);
   el('key-config-wrap').style.display = 'none';
-  alert("API Key saved in this browser only.");
+  alert("Arena API key saved in this browser only.");
 });
 
 // ---------- MULTI-IMAGE UPLOAD ----------
@@ -986,7 +995,7 @@ function getCompressedBase64(file, maxDimension, quality) {
   });
 }
 
-// ---------- GROQ TRANSPORT ----------
+// ---------- ARENA GATEWAY TRANSPORT ----------
 function parseLooseJson(txt) {
   if (txt === null || txt === undefined) throw new Error('Empty response from model.');
   var s = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -998,62 +1007,101 @@ function parseLooseJson(txt) {
   throw new Error('Model did not return valid JSON. Raw start: ' + s.slice(0, 240));
 }
 
-function groqErrorFriendly(err) {
+function arenaErrorFriendly(err) {
   var m = String((err && err.message) || err || '');
-  if (/decommission|no longer supported|model_not_found|no such model|not found/i.test(m))
-    return m + '\n\nAll built-in vision models failed. Check the model id in the API key panel.';
+  if (/could not reach|failed to fetch|networkerror|load failed|cors/i.test(m))
+    return m + '\n\nThe Arena gateway could not be reached from this page. Check the connection - and if the site is self-hosted, that its origin is allowed by the gateway.';
+  // Before the model check: a 429 for the router names the router too, and
+  // "wait a few seconds" is the right advice there, not "change model id".
   if (/rate.?limit|429|too many requests|quota/i.test(m))
-    return m + '\n\nRate limited by Groq - wait ~10 seconds and extract again.';
-  if (/401|403|invalid.*key|unauthor|permission/i.test(m))
-    return m + '\n\nCheck the API key saved under the API Key button.';
+    return m + '\n\nRate limited by the Arena gateway - wait a few seconds and extract again.';
+  if (/401|403|invalid.*key|unauthor|authenticat|permission/i.test(m))
+    return m + '\n\nCheck the Arena API key: save it under the API Key button on this device, or set the ARENA_API_KEY repository secret so the deployed page carries it.';
+  if (/router|model_not_found|no such model|unknown model|decommission|not found/i.test(m))
+    return m + '\n\nAll built-in model ids failed. Leave it at coding-router-preview unless your Arena plan names a different one.';
   if (/20 ?MB|too large|payload|413/i.test(m))
-    return m + '\n\nImage too large for the API - try a single page at a time.';
-  if (/failed to fetch|networkerror|load failed/i.test(m))
-    return m + '\n\nNetwork error - check your connection and try again.';
+    return m + '\n\nImage too large for the gateway - try a single page at a time.';
+  if (/context|too long|maximum.*token/i.test(m))
+    return m + '\n\nToo much in one pass - extract the production sheet and the breakdown log separately.';
   return m;
 }
 
-async function callGroqVision(apiKey, promptText, imagesB64, preferredModel) {
-  var models = preferredModel ? [preferredModel].concat(GROQ_MODELS.filter(function(m){ return m !== preferredModel; })) : GROQ_MODELS;
+// One chat-completions body. The gateway is OpenAI-shaped, but not every
+// upstream model accepts response_format / max_completion_tokens, so the
+// caller retries the same model with the minimal body if the first is rejected.
+function arenaRequestBody(model, promptText, imagesB64, full) {
+  var content = [{ type: 'text', text: promptText }];
+  imagesB64.forEach(function(b64){
+    content.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } });
+  });
+  var body = {
+    model: model,
+    messages: [{ role: 'user', content: content }],
+    temperature: 0.1
+  };
+  if (full) {
+    body.max_completion_tokens = 4096;
+    body.response_format = { type: 'json_object' };
+  } else {
+    body.max_tokens = 4096;
+  }
+  return body;
+}
+
+// Accept a plain string or a list of content blocks, whichever shape the
+// routed model answers with.
+function readCompletionText(data) {
+  var choice = data && data.choices && data.choices[0];
+  if (!choice) throw new Error('The Arena model returned an empty completion.');
+  var c = (choice.message && choice.message.content);
+  if (c === undefined || c === null) c = choice.text;
+  if (Array.isArray(c)) {
+    c = c.map(function(part){
+      if (typeof part === 'string') return part;
+      return (part && (part.text || part.content)) || '';
+    }).join('');
+  }
+  if (typeof c !== 'string' || !c.trim()) throw new Error('The Arena model returned an empty completion.');
+  return c;
+}
+
+async function callArenaVision(apiKey, promptText, imagesB64, preferredModel) {
+  var models = preferredModel ? [preferredModel].concat(ARENA_MODELS.filter(function(m){ return m !== preferredModel; })) : ARENA_MODELS;
   var lastErr = null;
 
   for (var i = 0; i < models.length; i++) {
-    var content = [{ type: 'text', text: promptText }];
-    imagesB64.forEach(function(b64){
-      content.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } });
-    });
-
-    var response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: models[i],
-        messages: [{ role: 'user', content: content }],
-        temperature: 0.1,
-        max_completion_tokens: 4096,
-        response_format: { type: 'json_object' }
-      })
-    });
-
-    if (!response.ok) {
-      var msg = 'HTTP ' + response.status;
+    for (var variant = 0; variant < 2; variant++) {
+      var response;
       try {
-        var j = await response.json();
-        msg = (j.error && j.error.message) || msg;
-      } catch(e) {}
-      lastErr = new Error(msg);
-      // 400/404 usually means "this model id is wrong" - fall through to the next one.
-      if (response.status === 400 || response.status === 404) continue;
-      throw lastErr;
-    }
+        response = await fetch(ARENA_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify(arenaRequestBody(models[i], promptText, imagesB64, variant === 0))
+        });
+      } catch (netErr) {
+        throw new Error('Could not reach the Arena gateway: ' + ((netErr && netErr.message) || netErr));
+      }
 
-    var data = await response.json();
-    var choice = data.choices && data.choices[0];
-    if (!choice) throw new Error('Model returned an empty completion.');
-    var parsed = parseLooseJson(choice.message && choice.message.content);
-    return { parsed: parsed, model: models[i], raw: choice.message.content };
+      if (!response.ok) {
+        var msg = 'HTTP ' + response.status;
+        try {
+          var j = await response.json();
+          msg = (j.error && j.error.message) || msg;
+        } catch(e) {}
+        lastErr = new Error(msg);
+        // 400/404/422 usually mean "this body or this model id is wrong" -
+        // fall through to the plain body and then to the next model.
+        if (response.status === 400 || response.status === 404 || response.status === 422) continue;
+        // 401/403/429/5xx will not be fixed by another model.
+        throw lastErr;
+      }
+
+      var data = await response.json();
+      var text = readCompletionText(data);
+      return { parsed: parseLooseJson(text), model: models[i], raw: text };
+    }
   }
-  throw lastErr || new Error('No usable vision model on this API key.');
+  throw lastErr || new Error('The Arena gateway did not answer for any known model.');
 }
 
 function chunk(arr, size) {
@@ -1152,7 +1200,7 @@ async function runExtraction(apiKey, label, promptText, items, onProgress) {
     for (var k = 0; k < batches[b].length; k++) {
       prepared.push(await getCompressedBase64(batches[b][k].file));
     }
-    var res = await callGroqVision(apiKey, promptText, prepared, model);
+    var res = await callArenaVision(apiKey, promptText, prepared, model);
     model = res.model;
     rawAll.push('--- batch ' + (b + 1) + '/' + batches.length + ' (' + model + ') ---\n' + res.raw);
     merged = mergeExtraction(merged, res.parsed);
@@ -1639,11 +1687,11 @@ el('review-apply-btn').addEventListener('click', function(){ applyExtractedDraft
 
 // ---------- MAIN EXTRACT ----------
 el('ai-process-btn').addEventListener('click', async function(){
-  var apiKey = getGroqKey();
+  var apiKey = getArenaKey();
 
   if (!apiKey) {
     el('key-config-wrap').style.display = 'block';
-    alert('Add a Groq API key (starts with gsk_...) under the API Key button to run extraction in your browser.');
+    alert('Add your Arena API key under the API Key button to run extraction in your browser.');
     return;
   }
 
@@ -1684,7 +1732,7 @@ el('ai-process-btn').addEventListener('click', async function(){
     }
     openReview(merged, rawParts.join('\n\n'), notes.join('\n'));
   } catch (error) {
-    setStatus('Extraction failed:\n' + groqErrorFriendly(error), 'err');
+    setStatus('Extraction failed:\n' + arenaErrorFriendly(error), 'err');
   } finally {
     btn.disabled = false;
     el('ai-loader').classList.remove('active');
@@ -1713,9 +1761,9 @@ async function runOneClick() {
     return;
   }
 
-  var apiKey = getGroqKey();
+  var apiKey = getArenaKey();
   if (!apiKey) {
-    oneClickStatus('No Groq key on this device. Open the API Key button in the AI panel below, save a gsk_... key once, then run this again - one-click uses it silently from then on.', 'err');
+    oneClickStatus('No Arena key on this device. Open the API Key button in the AI panel below, save your key once, then run this again - one-click uses it silently from then on.', 'err');
     el('key-config-wrap').style.display = 'block';
     return;
   }
@@ -1805,7 +1853,7 @@ async function runOneClick() {
         ? '\nFlagged: ' + notes.join(' | ') + '\nPress CHECK READINGS to correct a value before sending.'
         : '\nNothing was flagged. Press CHECK READINGS to skim the values.'), touched.length ? 'ok' : 'err');
   } catch (error) {
-    oneClickStatus('One-click failed:\n' + groqErrorFriendly(error), 'err');
+    oneClickStatus('One-click failed:\n' + arenaErrorFriendly(error), 'err');
   } finally {
     btn.disabled = false;
   }
@@ -2479,6 +2527,26 @@ function generateReport() {
   });
   report += 'Regards\nOmkar & Santanu\n';
   el('report-output').textContent = report;
+  // Kept so the next shift's one-click run can pick up the running totals.
+  archiveReport({ date: S.nextDate, shift: S.nextShift, text: report });
+  goPhase(3);
+}
+
+// Boot check
+if (isContributor) {
+  setupContributorView(targetSecKey, targetSubKey);
+} else {
+  var restored = await checkAndRestoreState();
+  if (!restored) {
+    goPhase(1);
+  }
+}
+
+});
+</script>
+</body>
+</html>
+nt = report;
   // Kept so the next shift's one-click run can pick up the running totals.
   archiveReport({ date: S.nextDate, shift: S.nextShift, text: report });
   goPhase(3);

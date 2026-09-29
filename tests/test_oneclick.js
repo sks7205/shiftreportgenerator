@@ -57,7 +57,7 @@ function boot(opts) {
   // operator never types a key. injectedKey:false is a fresh local file.
   const html = opts.injectedKey === false
     ? rawHtml
-    : rawHtml.replace('const INJECTED_KEY = "__GROQ_API_KEY__";', 'const INJECTED_KEY = "gsk_injected";');
+    : rawHtml.replace('const INJECTED_KEY = "__ARENA_API_KEY__";', 'const INJECTED_KEY = "arena_injected_key";');
 
   const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://example.test/index.html', pretendToBeVisual: true });
   const { window } = dom;
@@ -78,6 +78,7 @@ function boot(opts) {
     const body = JSON.parse(o.body);
     const isProd = /PRODUCTION SHEET/.test(body.messages[0].content[0].text);
     calls.push({
+      url,
       model: body.model,
       auth: o.headers.Authorization,
       isProd,
@@ -118,15 +119,17 @@ function addPhoto(t, n) {
   const $ = t.$;
 
   ok('starts on the paste step, untouched', $('phase-prev-report').classList.contains('active'));
-  ok('no key is entered by the operator', $('groq-key-input').value === '');
+  ok('no key is entered by the operator', $('arena-key-input').value === '');
 
   addPhoto(t, 2);
   await wait(800);
 
   ok('ran without asking for a key', t.calls.length > 0, 'calls: ' + t.calls.length);
-  ok('used the injected deploy key', t.calls.every(c => c.auth === 'Bearer gsk_injected'), JSON.stringify(t.calls.map(c => c.auth)));
+  ok('used the injected deploy key', t.calls.every(c => c.auth === 'Bearer arena_injected_key'), JSON.stringify(t.calls.map(c => c.auth)));
   ok('both pages went in one request', t.calls.every(c => c.imgs === 2), JSON.stringify(t.calls.map(c => c.imgs)));
-  ok('called the live vision model', t.calls.every(c => c.model === 'qwen/qwen3.8-27b'), JSON.stringify(t.calls.map(c => c.model)));
+  ok('called the Arena gateway, not Groq', t.calls.every(c => c.url === 'https://api.preview.arena.ai/v1/chat/completions'),
+     JSON.stringify(t.calls.map(c => c.url)));
+  ok('named the Arena router model', t.calls.every(c => c.model === 'coding-router-preview'), JSON.stringify(t.calls.map(c => c.model)));
   ok('no alert dialogs in the happy path', t.alerts.length === 0, JSON.stringify(t.alerts));
 
   ok('shift read from the sheet heading', $('header-shift').textContent === '28/09/2026 / B', $('header-shift').textContent);
@@ -238,7 +241,7 @@ function addPhoto(t, n) {
   addPhoto(noKey, 1);
   await wait(400);
   ok('does not call the API without a key', noKey.calls.length === 0, JSON.stringify(noKey.calls));
-  ok('explains what is missing', /No Groq key on this device/.test(noKey.$('oneclick-status').textContent), noKey.$('oneclick-status').textContent);
+  ok('explains what is missing', /No Arena key on this device/.test(noKey.$('oneclick-status').textContent), noKey.$('oneclick-status').textContent);
   ok('opens the key panel', noKey.$('key-config-wrap').style.display === 'block');
   ok('button re-enabled', noKey.$('oneclick-btn').disabled === false);
 

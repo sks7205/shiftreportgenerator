@@ -56,6 +56,10 @@ function eq(label, got, want) {
   if (ok) { pass++; console.log('  ok   ' + label); }
   else { fail++; console.log('  FAIL ' + label + '\n       got  ' + JSON.stringify(got) + '\n       want ' + JSON.stringify(want)); }
 }
+function ok(label, cond, extra) {
+  if (cond) { pass++; console.log('  ok   ' + label); }
+  else { fail++; console.log('  FAIL ' + label + (extra ? '\n       ' + extra : '')); }
+}
 
 console.log('--- normTime (24h and 12h, padded/dotted/AM-PM) ---');
 eq('07:00:00', api.normTime('07:00:00'), '07:00');
@@ -80,7 +84,16 @@ eq('SA p = x4', api.saCount('50p'), 200);
 eq('SA plain', api.saCount('200'), 200);
 eq('SA empty', api.saCount(''), 0);
 
-console.log('--- chunk (Groq caps vision requests at 3 images) ---');
+console.log('--- the vision transport is the Arena gateway, not Groq ---');
+ok('no Groq reference left in the page', !/groq/i.test(html), (html.match(/.{0,60}groq.{0,60}/i) || [''])[0]);
+ok('posts to the Arena gateway chat-completions endpoint',
+  src.includes('const ARENA_ENDPOINT') && src.includes('https://api.preview.arena.ai/v1/chat/completions'));
+ok('names the Arena router model', src.includes("ARENA_MODELS = ['coding-router-preview']"));
+ok('deploy secret placeholder is the Arena key', /INJECTED_KEY = "__ARENA_API_KEY__"/.test(src));
+ok('saved key is the Arena key', /ars_arena_api_key/.test(src) && !/ars_groq_api_key/.test(src));
+ok('transport calls the Arena gateway', /async function callArenaVision\(/.test(src) && !/callGroqVision/.test(src));
+
+console.log('--- chunk (images are sent 3 per request) ---');
 eq('7 imgs -> 3+3+1', api.chunk([1,2,3,4,5,6,7], 3).map(b => b.length), [3,3,1]);
 eq('no imgs -> one empty batch', api.chunk([], 3), [[]]);
 

@@ -32,12 +32,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Injects the GROQ_API_KEY from GitHub Secrets into index.html prior to deployment
+      # Injects the ARENA_API_KEY from GitHub Secrets into index.html prior to deployment.
+      # Done in node rather than sed so a key containing & or | cannot corrupt the page.
       - name: Inject Secret into HTML
         env:
-          GROQ_KEY: ${{ secrets.GROQ_API_KEY }}
+          ARENA_KEY: ${{ secrets.ARENA_API_KEY }}
         run: |
-          sed -i "s|__GROQ_API_KEY__|$GROQ_KEY|g" index.html
+          if [ -z "$ARENA_KEY" ]; then
+            echo "::warning::ARENA_API_KEY secret is not set - the deployed page will have no key and each device will have to paste one."
+          fi
+          node -e "const fs=require('fs');const k=process.env.ARENA_KEY||'';const f='index.html';fs.writeFileSync(f,fs.readFileSync(f,'utf8').split('__ARENA_API_KEY__').join(k));"
+          if grep -q '__ARENA_API_KEY__' index.html; then echo "::error::placeholder still present after injection"; exit 1; fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

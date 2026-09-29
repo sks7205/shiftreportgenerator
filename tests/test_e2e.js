@@ -1,4 +1,4 @@
-// End-to-end test: drives the real index.html in jsdom with a stubbed Groq API.
+// End-to-end test: drives the real index.html in jsdom with a stubbed Arena gateway.
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
@@ -28,7 +28,7 @@ window.fetch = function (url, opts) {
   const body = JSON.parse(opts.body);
   const prompt = body.messages[0].content[0].text;
   const isProd = /PRODUCTION SHEET/.test(prompt);
-  calls.push({ model: body.model, images: body.messages[0].content.length - 1, isProd, json: !!body.response_format });
+  calls.push({ url, model: body.model, auth: opts.headers.Authorization, images: body.messages[0].content.length - 1, isProd, json: !!body.response_format });
   const content = isProd
     ? JSON.stringify({ ars2: { lul: '800/400, 400', ab: '3', bp: '22', rr: '2/1/0/0', ra: '120,130' },
                        ars3: { ars3ra: '80', ars3sa: '50p', ars3ba: '4' },
@@ -122,8 +122,8 @@ const PREV_REPORT = [
   addImages('prod-img', 1, 'prod-extra');
   ok('re-added', $('prod-preview').children.length === 4);
 
-  console.log('--- extract (stubbed Groq) ---');
-  $('groq-key-input').value = 'gsk_test_key';
+  console.log('--- extract (stubbed Arena gateway) ---');
+  $('arena-key-input').value = 'arena_test_key';
   $('ai-process-btn').click();
   await wait(400);
 
@@ -131,7 +131,11 @@ const PREV_REPORT = [
   const bdCalls = calls.filter(c => !c.isProd);
   eq('4 production images batched into 2 calls (3+1)', prodCalls.map(c => c.images), [3, 1]);
   eq('1 breakdown image = 1 call', bdCalls.map(c => c.images), [1]);
-  ok('uses a live vision model, not the dead id', calls.every(c => c.model === 'qwen/qwen3.8-27b'), JSON.stringify(calls.map(c => c.model)));
+  ok('every call goes to the Arena gateway', calls.every(c => c.url === 'https://api.preview.arena.ai/v1/chat/completions'),
+     JSON.stringify(calls.map(c => c.url)));
+  ok('every call is authorised with the saved Arena key', calls.every(c => c.auth === 'Bearer arena_test_key'),
+     JSON.stringify(calls.map(c => c.auth)));
+  ok('names the Arena router model', calls.every(c => c.model === 'coding-router-preview'), JSON.stringify(calls.map(c => c.model)));
   ok('JSON mode requested', calls.every(c => c.json));
   ok('review card is open', $('review-card').style.display === 'block');
   ok('status shows success', /review/i.test($('extract-status').textContent), $('extract-status').textContent);
