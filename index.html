@@ -68,8 +68,25 @@ textarea{resize:vertical;min-height:80px;}
 .upload-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
 .upload-box label { color: var(--accent); margin-bottom: 8px; font-size: 11px; }
 .upload-box input[type=file] { width: 100%; font-size: 12px; padding: 6px; margin: 0; background: var(--surface); cursor: pointer; }
-.preview-area { display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px; border-radius: 6px; border: 1px solid var(--border); margin-top: 8px; }
-.preview-area img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+.thumb-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.thumb { position: relative; width: 50px; height: 50px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-x { position: absolute; top: 0; right: 0; background: rgba(239,68,68,.92); color: #fff; border: none; font-size: 9px; font-weight: 700; line-height: 1; padding: 2px 4px; cursor: pointer; border-bottom-left-radius: 4px; }
+.upload-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.file-count { font-size: 11px; color: var(--muted); font-family: monospace; }
+.extract-status { margin-top: 10px; font-size: 12px; font-family: monospace; color: var(--accent2); background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.3); border-radius: var(--radius); padding: 9px 12px; white-space: pre-wrap; }
+.extract-status.err { color: #fca5a5; background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.45); }
+.extract-status.ok { color: var(--green); background: rgba(16,185,129,.1); border-color: rgba(16,185,129,.4); }
+.rv-block { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+.rv-head { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.rv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+@media(max-width: 600px) { .rv-grid { grid-template-columns: 1fr; } }
+.rv-grid input, .rv-grid textarea { margin-bottom: 10px; }
+.rv-full { grid-column: 1 / -1; }
+.rv-out { background: #0a0c10; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 12px; color: #a3e635; white-space: pre-wrap; max-height: 40vh; overflow-y: auto; }
+.rv-note { font-size: 12px; color: var(--accent); background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.35); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; white-space: pre-wrap; }
+.rv-flag { color: #fca5a5; font-weight: 700; }
+.rv-hits { font-size: 11px; color: var(--muted); font-family: monospace; margin-bottom: 6px; }
 
 .loader-overlay{display:none;position:absolute;inset:0;background:rgba(20,23,32,0.85);backdrop-filter:blur(3px);z-index:50;align-items:center;justify-content:center;border-radius:var(--radius);flex-direction:column;gap:10px;}
 .loader-overlay.active{display:flex;}
@@ -132,23 +149,43 @@ textarea{resize:vertical;min-height:80px;}
         <div class="upload-grid">
           <div class="upload-box">
             <label>1. PRODUCTION SHEET</label>
-            <input type="file" id="prod-img" accept="image/*">
-            <div class="preview-area" id="prod-preview" style="display:none;">
-               <img id="prod-thumb" src="" alt="preview">
-               <button class="btn btn-danger btn-sm" id="prod-clear">X Remove</button>
+            <input type="file" id="prod-img" accept="image/*" multiple>
+            <div class="thumb-strip" id="prod-preview"></div>
+            <div class="upload-foot">
+              <span class="file-count" id="prod-count">No images</span>
+              <button class="btn btn-danger btn-sm" id="prod-clear" style="display:none;">CLEAR</button>
             </div>
           </div>
           <div class="upload-box">
             <label>2. SAP BREAKDOWN</label>
-            <input type="file" id="bd-img" accept="image/*">
-            <div class="preview-area" id="bd-preview" style="display:none;">
-               <img id="bd-thumb" src="" alt="preview">
-               <button class="btn btn-danger btn-sm" id="bd-clear">X Remove</button>
+            <input type="file" id="bd-img" accept="image/*" multiple>
+            <div class="thumb-strip" id="bd-preview"></div>
+            <div class="upload-foot">
+              <span class="file-count" id="bd-count">No images</span>
+              <button class="btn btn-danger btn-sm" id="bd-clear" style="display:none;">CLEAR</button>
             </div>
           </div>
         </div>
-        
-        <button class="btn btn-ai" id="ai-process-btn">&#9889; Auto-Extract & Fill Data</button>
+
+        <div class="info-box" style="font-size:11px;">Add every page of the sheet &mdash; images are sent in batches of 3 and merged, so multi-page production sheets and multi-page breakdown logs both work.</div>
+
+        <button class="btn btn-ai" id="ai-process-btn">&#9889; Extract Production &amp; Breakdown</button>
+        <div class="extract-status" id="extract-status" style="display:none;"></div>
+      </div>
+
+      <!-- REVIEW BEFORE FILL -->
+      <div class="card" id="review-card" style="display:none;">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <span>&#128269; Review Extraction</span>
+          <button class="btn btn-secondary btn-sm" id="review-raw-btn">SHOW RAW OUTPUT</button>
+        </div>
+        <div class="info-box">Check every value below, edit anything the model mis-read, then press <b>APPLY TO SECTIONS</b>. Nothing is written to the report until you do.</div>
+        <div id="review-panel"></div>
+        <div class="btn-row">
+          <button class="btn btn-success" id="review-apply-btn">&#10004; APPLY TO SECTIONS</button>
+          <button class="btn btn-secondary" id="review-discard-btn">&#8635; DISCARD</button>
+          <button class="btn btn-secondary" id="review-undo-btn" style="display:none;">&#8617; UNDO LAST APPLY</button>
+        </div>
       </div>
 
       <div class="section-grid" id="section-grid"></div>
@@ -685,10 +722,24 @@ el('preview-toggle-btn').addEventListener('click', function(){
   this.textContent = hidden ? 'HIDE' : 'SHOW';
 });
 
-// ===== DIRECT CLIENT-SIDE VISION OCR (GROQ API) =====
+// ===== DIRECT CLIENT-SIDE VISION EXTRACTION (GROQ API) =====
+// Two independent passes: PRODUCTION sheet and SAP BREAKDOWN log.
+// Each pass gets its own focused prompt, is batched 3 images per request
+// (Groq vision limit) and is merged. Nothing is written to the report
+// until the operator reviews the result in the review panel.
 const INJECTED_KEY = "__GROQ_API_KEY__";
 const STORED_KEY = localStorage.getItem('ars_groq_api_key') || '';
 if(STORED_KEY) el('groq-key-input').value = STORED_KEY;
+
+// Groq retires vision models quickly - try these in order and stick with
+// whichever one answers. llama-3.2-11b-vision was decommissioned 14 Apr 2025.
+const GROQ_MODELS = ['qwen/qwen3.8-27b', 'meta-llama/llama-4-scout-17b-16e-instruct'];
+const MAX_IMAGES_PER_REQUEST = 3;
+const MAX_IMAGE_EDGE = 1800;
+const JPEG_QUALITY = 0.82;
+
+var AI_IMG = { prod: [], bd: [] };
+var AI_DRAFT = null;   // { merged, raw, snapshot, notes }
 
 el('key-cfg-btn').addEventListener('click', function(){
   var wrap = el('key-config-wrap');
@@ -703,218 +754,779 @@ el('save-key-btn').addEventListener('click', function(){
   }
   localStorage.setItem('ars_groq_api_key', k);
   el('key-config-wrap').style.display = 'none';
-  alert("API Key saved securely in browser!");
+  alert("API Key saved in this browser only.");
 });
 
-function setupImageUpload(inputId, previewId, thumbId, clearId) {
-    var input = el(inputId);
-    input.addEventListener('change', function() {
-        if(this.files && this.files[0]) {
-            var reader = new FileReader();
-            reader.onload = function(e) {
-                el(thumbId).src = e.target.result;
-                el(previewId).style.display = 'flex';
-                input.style.display = 'none';
-            }
-            reader.readAsDataURL(this.files[0]);
-        }
+// ---------- MULTI-IMAGE UPLOAD ----------
+function renderThumbs(kind) {
+  var strip = el(kind + '-preview');
+  var cnt = el(kind + '-count');
+  var clr = el(kind + '-clear');
+  if(!strip) return;
+  strip.innerHTML = '';
+  AI_IMG[kind].forEach(function(item, i){
+    var t = document.createElement('div');
+    t.className = 'thumb';
+    t.title = item.name;
+    var img = document.createElement('img');
+    img.src = item.preview;
+    img.alt = item.name;
+    var x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'thumb-x';
+    x.textContent = 'X';
+    x.title = 'Remove this image';
+    x.addEventListener('click', function(e){
+      e.stopPropagation();
+      try { URL.revokeObjectURL(item.preview); } catch(err) {}
+      AI_IMG[kind].splice(i, 1);
+      renderThumbs(kind);
     });
-    el(clearId).addEventListener('click', function() {
-        input.value = '';
-        el(previewId).style.display = 'none';
-        input.style.display = 'block';
-        el(thumbId).src = '';
-    });
+    t.appendChild(img);
+    t.appendChild(x);
+    strip.appendChild(t);
+  });
+  var n = AI_IMG[kind].length;
+  cnt.textContent = n ? n + ' image' + (n > 1 ? 's' : '') + ' ready' : 'No images';
+  clr.style.display = n ? 'inline-flex' : 'none';
 }
-setupImageUpload('prod-img', 'prod-preview', 'prod-thumb', 'prod-clear');
-setupImageUpload('bd-img', 'bd-preview', 'bd-thumb', 'bd-clear');
 
-function getCompressedBase64(file, maxDimension = 1600, quality = 0.8) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const img = new Image();
-      img.onload = function() {
-        let width = img.width;
-        let height = img.height;
+function setupImageUpload(kind, inputId) {
+  var input = el(inputId);
+  input.addEventListener('change', function(){
+    var files = Array.prototype.slice.call(this.files || []);
+    files.forEach(function(f){
+      AI_IMG[kind].push({ name: f.name, file: f, preview: URL.createObjectURL(f) });
+    });
+    this.value = '';
+    renderThumbs(kind);
+  });
+  el(kind + '-clear').addEventListener('click', function(){
+    AI_IMG[kind].forEach(function(i){ try { URL.revokeObjectURL(i.preview); } catch(e) {} });
+    AI_IMG[kind] = [];
+    renderThumbs(kind);
+  });
+  renderThumbs(kind);
+}
+setupImageUpload('prod', 'prod-img');
+setupImageUpload('bd', 'bd-img');
 
+function getCompressedBase64(file, maxDimension, quality) {
+  maxDimension = maxDimension || MAX_IMAGE_EDGE;
+  quality = quality || JPEG_QUALITY;
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = function(){
+        var width = img.width, height = img.height;
+        if (!width || !height) { reject(new Error('Could not read image dimensions.')); return; }
         if (width > maxDimension || height > maxDimension) {
-          if (width > height) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          } else {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
-          }
+          if (width > height) { height = Math.round((height * maxDimension) / width); width = maxDimension; }
+          else { width = Math.round((width * maxDimension) / height); height = maxDimension; }
         }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
+        var canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
-
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(dataUrl.split(',')[1]);
+        try {
+          resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
+        } catch(err) {
+          reject(new Error('Could not encode image for upload.'));
+        }
       };
-      img.onerror = reject;
+      img.onerror = function(){ reject(new Error('Unsupported or corrupt image file.')); };
       img.src = e.target.result;
     };
-    reader.onerror = reject;
+    reader.onerror = function(){ reject(new Error('Could not read the selected file.')); };
     reader.readAsDataURL(file);
   });
 }
 
-el('ai-process-btn').addEventListener('click', async function(){
-    const prodInput = el('prod-img');
-    const bdInput = el('bd-img');
-    
-    let apiKey = (INJECTED_KEY && !INJECTED_KEY.startsWith("__")) ? INJECTED_KEY : (localStorage.getItem('ars_groq_api_key') || el('groq-key-input').value.trim());
+// ---------- GROQ TRANSPORT ----------
+function parseLooseJson(txt) {
+  if (txt === null || txt === undefined) throw new Error('Empty response from model.');
+  var s = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();
+  try { return JSON.parse(s); } catch(e) {}
+  var a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a !== -1 && b > a) {
+    try { return JSON.parse(s.slice(a, b + 1)); } catch(e2) {}
+  }
+  throw new Error('Model did not return valid JSON. Raw start: ' + s.slice(0, 240));
+}
 
-    if(!apiKey) {
-      el('key-config-wrap').style.display = 'block';
-      alert("Please provide a free Groq API Key (starts with gsk_...) to run Vision extraction directly in your browser.");
-      return;
+function groqErrorFriendly(err) {
+  var m = String((err && err.message) || err || '');
+  if (/decommission|no longer supported|model_not_found|no such model|not found/i.test(m))
+    return m + '\n\nAll built-in vision models failed. Check the model id in the API key panel.';
+  if (/rate.?limit|429|too many requests|quota/i.test(m))
+    return m + '\n\nRate limited by Groq - wait ~10 seconds and extract again.';
+  if (/401|403|invalid.*key|unauthor|permission/i.test(m))
+    return m + '\n\nCheck the API key saved under the API Key button.';
+  if (/20 ?MB|too large|payload|413/i.test(m))
+    return m + '\n\nImage too large for the API - try a single page at a time.';
+  if (/failed to fetch|networkerror|load failed/i.test(m))
+    return m + '\n\nNetwork error - check your connection and try again.';
+  return m;
+}
+
+async function callGroqVision(apiKey, promptText, imagesB64, preferredModel) {
+  var models = preferredModel ? [preferredModel].concat(GROQ_MODELS.filter(function(m){ return m !== preferredModel; })) : GROQ_MODELS;
+  var lastErr = null;
+
+  for (var i = 0; i < models.length; i++) {
+    var content = [{ type: 'text', text: promptText }];
+    imagesB64.forEach(function(b64){
+      content.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } });
+    });
+
+    var response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: models[i],
+        messages: [{ role: 'user', content: content }],
+        temperature: 0.1,
+        max_completion_tokens: 4096,
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (!response.ok) {
+      var msg = 'HTTP ' + response.status;
+      try {
+        var j = await response.json();
+        msg = (j.error && j.error.message) || msg;
+      } catch(e) {}
+      lastErr = new Error(msg);
+      // 400/404 usually means "this model id is wrong" - fall through to the next one.
+      if (response.status === 400 || response.status === 404) continue;
+      throw lastErr;
     }
-    
-    if(!prodInput.files.length && !bdInput.files.length) {
-        alert("Please select at least one image before extracting.");
-        return;
+
+    var data = await response.json();
+    var choice = data.choices && data.choices[0];
+    if (!choice) throw new Error('Model returned an empty completion.');
+    var parsed = parseLooseJson(choice.message && choice.message.content);
+    return { parsed: parsed, model: models[i], raw: choice.message.content };
+  }
+  throw lastErr || new Error('No usable vision model on this API key.');
+}
+
+function chunk(arr, size) {
+  var out = [];
+  for (var i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out.length ? out : [[]];
+}
+
+// Merge later batches into earlier ones without losing anything already found.
+function mergeNumericSection(target, src) {
+  if (!src || typeof src !== 'object') return;
+  Object.keys(src).forEach(function(k){
+    var v = src[k];
+    if (v === null || v === undefined || v === '') return;
+    if (target[k] === undefined || target[k] === null || target[k] === '') { target[k] = v; return; }
+    var t = String(target[k]).trim(), s = String(v).trim();
+    if (s === t) return;
+    // Only concatenate genuine free-text; numbers/tokens must not be summed silently.
+    if (/\d/.test(t) && /\d/.test(s) && t.length < 24 && s.length < 24) { target[k] = t + '/' + s; return; }
+    if (t.indexOf(s) === -1) target[k] = t + '\n' + s;
+  });
+}
+
+function mergeExtraction(base, extra) {
+  base = base || {};
+  extra = extra || {};
+  ['ars2', 'ars3', 'bath', 'warehouse'].forEach(function(sec){
+    if (extra[sec] && typeof extra[sec] === 'object') {
+      base[sec] = base[sec] || {};
+      mergeNumericSection(base[sec], extra[sec]);
     }
-    
-    el('ai-loader').classList.add('active');
-    
-    try {
-        var base64Array = [];
-        if(prodInput.files.length > 0) base64Array.push(await getCompressedBase64(prodInput.files[0]));
-        if(bdInput.files.length > 0) base64Array.push(await getCompressedBase64(bdInput.files[0]));
+  });
 
-        const contentArray = [
-          {
-            type: "text",
-            text: `You are an industrial data extraction assistant for an Anode Rodding Shop (ARS). Extract data strictly from visible text in the provided production and breakdown images.
-Return a STRICT, RAW JSON object:
-{
-  "ars2": { "lul": "e.g. 800/800 or 100p,100p", "ab": "string", "bp": "number", "rr": "string e.g. 2/1/0/0" },
-  "ars3": { "ars3ra": "number", "ars3sa": "string or number", "ars3ba": "number" },
-  "bath": { "bathprod": "number", "tanker": "number", "bathstock": "string e.g. RBS1/RBS2/F1/F2/F3/F4" },
-  "warehouse": { "whstock": "string", "whsent": "string", "whrcv": "string" },
-  "breakdowns": "line by line descriptions e.g. Loop-7(07:00AM-07:15AM)",
-  "sbh_mill": "operational remarks",
-  "rmt": "operational remarks"
-}`
-          }
-        ];
+  ['sbh_mill', 'rmt', 'notes'].forEach(function(k){
+    if (extra[k]) {
+      var s = String(extra[k]).trim();
+      if (!s) return;
+      if (!base[k]) base[k] = s;
+      else if (String(base[k]).indexOf(s) === -1) base[k] = String(base[k]) + '\n' + s;
+    }
+  });
 
-        base64Array.forEach(b64 => {
-          contentArray.push({
-            type: "image_url",
-            image_url: { url: `data:image/jpeg;base64,${b64}` }
-          });
-        });
-
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": "Bearer " + apiKey,
-            "Content-Type": "application/json"
-          },
-        body: JSON.stringify({
-          model: "llama-3.2-11b-vision", // Updated active model name
-          messages: [{ role: "user", content: contentArray }],
-          temperature: 0.1,
-          response_format: { type: "json_object" }
-        })
+  if (Array.isArray(extra.events)) {
+    base.events = base.events || [];
+    extra.events.forEach(function(ev){
+      if (!ev) return;
+      var key = ['equipment','issue','start','end','remarks'].map(function(k){
+        return String((ev[k] === undefined || ev[k] === null) ? '' : ev[k]).trim().toLowerCase();
+      }).join('|');
+      var dupe = base.events.some(function(b){
+        return ['equipment','issue','start','end','remarks'].map(function(k){
+          return String((b[k] === undefined || b[k] === null) ? '' : b[k]).trim().toLowerCase();
+        }).join('|') === key;
       });
+      if (!dupe) base.events.push(ev);
+    });
+  }
 
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error?.message || `HTTP ${response.status}`);
-        }
+  if (Array.isArray(extra.lines)) {
+    base.lines = base.lines || [];
+    extra.lines.forEach(function(l){
+      var s = String(l || '').trim();
+      if (s && base.lines.indexOf(s) === -1) base.lines.push(s);
+    });
+  }
 
-        const data = await response.json();
-        const rawContent = data.choices[0].message.content;
-        const cleanJson = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
-        const parsed = JSON.parse(cleanJson);
+  return base;
+}
 
-        autoFillFromAI(parsed);
-        alert("Data extracted successfully! Check the filled sections.");
-    } catch(error) {
-        alert("Vision Extraction Failed:\n\n" + error.message);
-    } finally {
-        el('ai-loader').classList.remove('active');
+async function runExtraction(apiKey, label, promptText, items, onProgress) {
+  var batches = chunk(items, MAX_IMAGES_PER_REQUEST);
+  var merged = {};
+  var rawAll = [];
+  var model = null;
+
+  for (var b = 0; b < batches.length; b++) {
+    onProgress(label + ': reading image batch ' + (b + 1) + ' of ' + batches.length + '…');
+    var prepared = [];
+    for (var k = 0; k < batches[b].length; k++) {
+      prepared.push(await getCompressedBase64(batches[b][k].file));
     }
+    var res = await callGroqVision(apiKey, promptText, prepared, model);
+    model = res.model;
+    rawAll.push('--- batch ' + (b + 1) + '/' + batches.length + ' (' + model + ') ---\n' + res.raw);
+    merged = mergeExtraction(merged, res.parsed);
+  }
+
+  return { merged: merged, raw: rawAll.join('\n\n'), model: model, batches: batches.length };
+}
+
+// ---------- PROMPTS ----------
+const PROD_PROMPT = [
+  'You extract Anode Rodding Shop (ARS) shift production figures from a photographed PRODUCTION SHEET.',
+  'The images are consecutive pages of the same sheet. Merge them into one set of figures - do NOT count a value twice just because a header or column repeats on the next page.',
+  '',
+  'Rules:',
+  '- Read ONLY what is actually visible. Never guess, infer or carry values over from another field.',
+  '- Use an empty string "" for anything not visible on the sheet.',
+  '- Copy values verbatim as written, including units, slashes and "p" suffixes (e.g. "100p").',
+  '',
+  'Return ONLY a JSON object of this exact shape:',
+  '{',
+  '  "ars2": { "lul": "<target>/<actual> exactly as written, e.g. 800/800 or 100p, 100p", "ab": "<AB count>", "bp": "<BP count>", "rr": "<RR/RH/SS/RS, e.g. 2/1/0/0>", "ra": "<rodded anodes exactly as written, e.g. 120 or 120,130 for CM1/CM2>" },',
+  '  "ars3": { "ars3ra": "<RA production FTS>", "ars3sa": "<SA processed FTS>", "ars3ba": "<BA received sets FTS>" },',
+  '  "bath": { "bathprod": "<bath production mt>", "tanker": "<tankers sent>", "bathstock": "<RBS1/RBS2/F1/F2/F3/F4 in that order>" },',
+  '  "warehouse": { "whstock": "<RAP/SAP/EBB/EAP>", "whsent": "<Sent RA/EB>", "whrcv": "<Rec SA/SB>" },',
+  '  "sbh_mill": "<SBH & mill remarks, a few short lines or empty>",',
+  '  "rmt": "<RMT remarks, a few short lines or empty>",',
+  '  "notes": "<anything illegible, cropped or ambiguous - keep it short>"',
+  '}',
+  'Every value must be a STRING. Do not add keys. Do not wrap the JSON in markdown.'
+].join('\n');
+
+const BD_PROMPT = [
+  'You extract equipment BREAKDOWN / DOWNTIME events from SAP-style screenshots.',
+  'The images are consecutive pages of the same log. Merge them and drop rows that are repeated on an overlap page.',
+  'The layout is NOT consistent between shifts, so identify each field by meaning, not by column position.',
+  '',
+  'For every breakdown row capture:',
+  '- equipment: the tag exactly as written, e.g. "Loop-7", "BC-11", "CR-3", "P-361"',
+  '- issue: short reason in 2-6 words, e.g. "torque overload"',
+  '- start: the start time exactly as written, e.g. "07:00:00" or "07:00" or "7:00 AM"',
+  '- end: the end time in the same format as start',
+  '- remarks: only any extra text such as duration or a note; "" if there is none',
+  '',
+  'Rules:',
+  '- Never invent an event. Only report rows you can actually read.',
+  '- If a row has no readable time, leave start and end as "" and still include the row.',
+  '- If a row is illegible, put your best reading in "equipment" and explain in "notes".',
+  '',
+  'Return ONLY a JSON object of this exact shape:',
+  '{',
+  '  "events": [ { "equipment": "", "issue": "", "start": "", "end": "", "remarks": "" } ],',
+  '  "lines": [ "one verbatim transcription per event row, exactly as the row reads on screen" ],',
+  '  "notes": "<ambiguous or illegible rows - keep it short>"',
+  '}',
+  'Include BOTH "events" and "lines". Do not wrap the JSON in markdown.'
+].join('\n');
+
+// ---------- BREAKDOWN NORMALISATION (layout tolerant) ----------
+var TIME_PAIR_RE = /(\d{1,2}[:.\s]\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)\s*(?:-|–|—|to|until|till)\s*(\d{1,2}[:.\s]\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)/i;
+// Pasted table rows often separate the two times with a pipe, tab or comma
+// instead of a dash, so accept that shape too.
+var TIME_ADJ_RE = /(\d{1,2}[:.\s]\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)\s*(?:[|\t;,]\s*|\s+)(\d{1,2}[:.\s]\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)/i;
+
+function matchTimePair(txt) {
+  return txt.match(TIME_PAIR_RE) || txt.match(TIME_ADJ_RE);
+}
+
+function normTime(t) {
+  if (!t) return '';
+  var s = String(t).trim().toLowerCase();
+  var h, mi;
+  // 12-hour form: 7:00 AM / 07:00 pm / 12:00 a.m.
+  var m12 = s.match(/(\d{1,2})[:.\s]?(\d{2})(?::?(\d{2}))?\s*([ap])\.?\s*m?/);
+  if (m12) {
+    h = parseInt(m12[1], 10);
+    mi = parseInt(m12[2], 10);
+    if (m12[4] === 'p' && h < 12) h += 12;
+    if (m12[4] === 'a' && h === 12) h = 0;
+  } else {
+    // 24-hour form: 07:00 / 07:00:00 / 07.05
+    var m24 = s.match(/(\d{1,2})[:.\s](\d{2})(?::?(\d{2}))?/);
+    if (!m24) return '';
+    h = parseInt(m24[1], 10);
+    mi = parseInt(m24[2], 10);
+  }
+  if (isNaN(h) || isNaN(mi) || mi > 59 || h > 23) return '';
+  return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+}
+
+function shiftWindowForDate() {
+  var p = (S.nextDate || getAutoDate()).split('/').map(Number);
+  var at = function(dayOff, h, mi){ return new Date(p[2], p[1] - 1, p[0] + dayOff, h, mi); };
+  if (S.nextShift === 'A') return [at(0, 6, 0), at(0, 14, 0)];
+  if (S.nextShift === 'B') return [at(0, 14, 0), at(0, 22, 0)];
+  return [at(0, 22, 0), at(1, 6, 0)];
+}
+
+function breakdownDeviations(hhmm) {
+  var notes = [];
+  if (!hhmm) return notes;
+  var parts = hhmm.split(':').map(Number);
+  if (isNaN(parts[0]) || isNaN(parts[1])) return notes;
+  var p = (S.nextDate || getAutoDate()).split('/').map(Number);
+  var endDt = new Date(p[2], p[1] - 1, p[0], parts[0], parts[1]);
+  if (S.nextShift === 'C' && parts[0] < 6) endDt.setDate(endDt.getDate() + 1);
+  if (endDt < new Date(Date.now() - 8 * 3600 * 1000)) notes.push('8hr deviation');
+  var ws = shiftWindowForDate();
+  if (endDt < ws[0] || endDt > ws[1]) notes.push('Shift deviation');
+  return notes;
+}
+
+function formatBreakdownEvent(ev) {
+  var equipment = String((ev && ev.equipment) || '').trim();
+  var issue = String((ev && ev.issue) || '').trim();
+  var remarks = String((ev && ev.remarks) || '').trim();
+  var start = normTime(ev && ev.start);
+  var end = normTime(ev && ev.end);
+
+  // If the model stuffed the issue into the equipment field, split it back out.
+  if (!issue && equipment.indexOf(',') !== -1) {
+    var parts = equipment.split(',');
+    equipment = parts.shift().trim();
+    issue = parts.join(',').trim();
+  }
+
+  var name = equipment;
+  if (issue) name = name ? name + ', ' + issue : issue;
+  if (!name && remarks) name = remarks;
+
+  var timeTxt = '';
+  if (start && end) timeTxt = '(' + to12hr(start) + '-' + to12hr(end) + ')';
+  else if (start) timeTxt = '(' + to12hr(start) + '-)';
+
+  var flags = breakdownDeviations(end || start);
+  return '*' + (name || 'Event') + timeTxt + (remarks ? ' ' + remarks : '') + (flags.length ? ' ' + flags.join(' & ') : '');
+}
+
+// Build report lines from whatever the model gave us. Falls back to the
+// verbatim transcription when the structured event list is unusable.
+function normaliseBreakdowns(merged) {
+  var out = [];
+  var events = (merged && Array.isArray(merged.events)) ? merged.events : [];
+  var lines = (merged && Array.isArray(merged.lines)) ? merged.lines : [];
+
+  events.forEach(function(ev){
+    if (!ev) return;
+    var hasContent = ['equipment','issue','start','end','remarks'].some(function(k){
+      return String((ev[k] || '')).trim() !== '';
+    });
+    if (!hasContent) return;
+    out.push(formatBreakdownEvent(ev));
+  });
+
+  // Nothing structured came back - salvage whatever we can from the raw lines.
+  if (!out.length) {
+    lines.forEach(function(l){
+      var txt = String(l || '').replace(/\s+/g, ' ').trim();
+      if (!txt) return;
+      var m = matchTimePair(txt);
+      if (m) {
+        var name = (txt.slice(0, m.index) + ' ' + txt.slice(m.index + m[0].length))
+          .replace(/^[\s,;|:.\-–]+/, '').replace(/[\s,;|:.\-–]+$/, '').trim();
+        out.push(formatBreakdownEvent({ equipment: name || txt, start: m[1], end: m[2] }));
+      } else {
+        out.push('*' + txt);
+      }
+    });
+  }
+
+  return out.join('\n');
+}
+
+// ---------- SHARED SECTION FORMATTING (mirrors the manual forms) ----------
+function fmtLulDisplay(raw) {
+  var lulRaw = String(raw || '').trim();
+  if (!lulRaw) return '';
+  var slashIdx = lulRaw.indexOf('/');
+  if (slashIdx === -1) return lulRaw;
+  var target = lulRaw.substring(0, slashIdx).trim();
+  var actualParts = lulRaw.substring(slashIdx + 1).trim().split(',');
+  if (actualParts.length < 2) return lulRaw;
+  var v1s = actualParts[0].trim(), v2s = actualParts[1].trim();
+  var v1 = v1s.endsWith('p') ? parseInt(v1s) * 4 : parseInt(v1s);
+  var v2 = v2s.endsWith('p') ? parseInt(v2s) * 4 : parseInt(v2s);
+  if (isNaN(v1) || isNaN(v2)) return lulRaw;
+  return target + '/' + (v1 + v2) + '(' + v1 + '/' + v2 + ')';
+}
+
+function fmtRoddedAnodes(raw) {
+  var raRaw = String(raw || '').trim();
+  if (!raRaw) return { total: 0, display: '' };
+  if (raRaw.indexOf(',') !== -1) {
+    var parts = raRaw.split(',').map(function(v){ return parseInt(v.trim()) || 0; });
+    var total = parts.reduce(function(a, b){ return a + b; }, 0);
+    return { total: total, display: total + '(' + parts.join('/') + ')' };
+  }
+  var n = parseInt(raRaw) || 0;
+  return { total: n, display: String(n) };
+}
+
+function saCount(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return 0;
+  return s.endsWith('p') ? (parseInt(s) || 0) * 4 : (parseInt(s) || 0);
+}
+
+// ---------- REVIEW PANEL ----------
+function setStatus(msg, kind) {
+  var box = el('extract-status');
+  box.style.display = msg ? 'block' : 'none';
+  box.className = 'extract-status' + (kind ? ' ' + kind : '');
+  box.textContent = msg || '';
+}
+
+var RV_FIELDS = [
+  { sec: 'ars2', key: 'lul', label: 'LUL Production (Target/Actual)', ph: '800/800 or 100p, 100p' },
+  { sec: 'ars2', key: 'ab', label: 'AB', ph: '' },
+  { sec: 'ars2', key: 'bp', label: 'BP', ph: '' },
+  { sec: 'ars2', key: 'rr', label: 'RR/RH/SS/RS', ph: '2/1/0/0' },
+  { sec: 'ars2', key: 'ra', label: 'Rodded Anodes (CM1,CM2 or single)', ph: '120 or 120,130' },
+  { sec: 'ars3', key: 'ars3ra', label: 'ARS-3 RA Production (FTS)', ph: '' },
+  { sec: 'ars3', key: 'ars3sa', label: 'ARS-3 SA Processed (FTS)', ph: '200 or 50p' },
+  { sec: 'ars3', key: 'ars3ba', label: 'ARS-3 BA Received sets (FTS)', ph: '' },
+  { sec: 'bath', key: 'bathprod', label: 'Bath Production (mt)', ph: '' },
+  { sec: 'bath', key: 'tanker', label: 'Tankers Sent (nos)', ph: '' },
+  { sec: 'bath', key: 'bathstock', label: 'RBS1/RBS2/F1/F2/F3/F4', ph: '115/157/420/457/475/450' },
+  { sec: 'warehouse', key: 'whstock', label: 'RAP/SAP/EBB/EAP', ph: '316/353/8/3' },
+  { sec: 'warehouse', key: 'whsent', label: 'Sent RA/EB', ph: '612/94' },
+  { sec: 'warehouse', key: 'whrcv', label: 'Rec SA/SB', ph: '692/102' }
+];
+
+// Sections that already hold data default to append, matching the manual
+// forms, so an extraction never silently wipes an earlier entry.
+function appendToggle(id, label, existing) {
+  if (!existing) return '';
+  return '<label style="display:flex; align-items:center; gap:6px; text-transform:none; ' +
+    'letter-spacing:0; color:var(--green); font-size:11px; margin-bottom:10px; cursor:pointer;">' +
+    '<input type="checkbox" id="' + id + '" checked> Append to the ' + esc(label) +
+    ' already in this report (uncheck to replace it)</label>' +
+    '<div class="rv-hits">Currently in the report: ' + esc(String(existing).replace(/\n/g, ' / ').slice(0, 160)) + '</div>';
+}
+
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function openReview(merged, rawText, notes) {
+  AI_DRAFT = { merged: merged, raw: rawText, notes: notes };
+
+  var html = '';
+
+  if (notes && notes.trim()) {
+    html += '<div class="rv-note"><b>Model flagged these as uncertain:</b>\n' + esc(notes.trim()) + '</div>';
+  }
+
+  html += '<div class="rv-block"><div class="rv-head">Production &amp; stock figures</div><div class="rv-grid">';
+  RV_FIELDS.forEach(function(f){
+    var v = (merged[f.sec] && merged[f.sec][f.key]) || '';
+    html += '<div><label>' + esc(f.label) + '</label>' +
+            '<input type="text" id="rv_' + f.sec + '_' + f.key + '" value="' + esc(v) + '" placeholder="' + esc(f.ph) + '"></div>';
+  });
+  html += '</div></div>';
+
+  var bdText = normaliseBreakdowns(merged);
+  var evCount = (Array.isArray(merged.events) && merged.events.length) ? merged.events.length : 0;
+  var lineCount = (Array.isArray(merged.lines) && merged.lines.length) ? merged.lines.length : 0;
+  html += '<div class="rv-block"><div class="rv-head">Breakdown events</div>' +
+    appendToggle('rv_bd_append', 'Breakdowns', S.data['Breakdowns']) +
+    '<div class="rv-hits">Read ' + evCount + ' structured event(s) and ' + lineCount + ' raw row(s). Edit below if a row was mis-read &mdash; one event per line.</div>' +
+    '<textarea id="rv_bd" rows="7" placeholder="No breakdown events detected - type them here, one per line.">' + esc(bdText) + '</textarea>' +
+    '<div class="rv-head" style="margin-top:6px;">What will be written to the report</div>' +
+    '<div class="rv-out" id="rv_bd_preview"></div></div>';
+
+  if (merged.sbh_mill) {
+    html += '<div class="rv-block"><div class="rv-head">SBH &amp; Mill</div>' +
+      appendToggle('rv_sbh_append', 'SBH &amp; Mill', S.data['SBH & Mill']) +
+      '<textarea id="rv_sbh_mill" rows="2">' + esc(merged.sbh_mill) + '</textarea></div>';
+  }
+  if (merged.rmt) {
+    html += '<div class="rv-block"><div class="rv-head">RMT</div>' +
+      appendToggle('rv_rmt_append', 'RMT', S.data['RMT']) +
+      '<textarea id="rv_rmt" rows="2">' + esc(merged.rmt) + '</textarea></div>';
+  }
+
+  html += '<div class="rv-block hidden" id="rv-raw-block"><div class="rv-head">Raw model output</div><div class="rv-out">' + esc(rawText) + '</div></div>';
+
+  el('review-panel').innerHTML = html;
+  el('review-card').style.display = 'block';
+  el('rv-raw-block').classList.add('hidden');
+  el('review-raw-btn').textContent = 'SHOW RAW OUTPUT';
+
+  updateBdPreview();
+  setStatus('Extraction complete - review the values, then apply.', 'ok');
+}
+
+function updateBdPreview() {
+  var t = el('rv_bd');
+  var p = el('rv_bd_preview');
+  if (!t || !p) return;
+  var raw = t.value;
+  var out = [];
+  raw.split('\n').forEach(function(line){
+    var txt = line.trim();
+    if (!txt) return;
+    if (txt.charAt(0) === '*') { out.push(txt); return; }
+    var m = matchTimePair(txt);
+    if (m) {
+      var name = (txt.slice(0, m.index) + ' ' + txt.slice(m.index + m[0].length))
+        .replace(/^[\s,;|:.\-–]+/, '').replace(/[\s,;|:.\-–]+$/, '').trim();
+      out.push(formatBreakdownEvent({ equipment: name || txt, start: m[1], end: m[2] }));
+    } else {
+      out.push('*' + txt);
+    }
+  });
+  p.innerHTML = out.length
+    ? esc(out.join('\n')).replace(/(8hr deviation|Shift deviation)/g, '<span class="rv-flag">$1</span>')
+    : '(nothing to write - all boxes empty)';
+}
+
+el('review-panel').addEventListener('input', function(e){
+  if (e.target && e.target.id === 'rv_bd') updateBdPreview();
 });
 
-function autoFillFromAI(ai) {
-  if(ai.breakdowns) {
-    let existing = S.data['Breakdowns'] || '';
-    saveSection('Breakdowns', existing ? existing+'\n'+ai.breakdowns : ai.breakdowns);
-  }
-  if(ai.rmt) {
-    let existing = S.data['RMT'] || '';
-    saveSection('RMT', existing ? existing+'\n'+ai.rmt : ai.rmt);
-  }
-  if(ai.sbh_mill) {
-    let existing = S.data['SBH & Mill'] || '';
-    saveSection('SBH & Mill', existing ? existing+'\n'+ai.sbh_mill : ai.sbh_mill);
-  }
-  
-  let ars2 = ai.ars2 || {};
-  if(ars2.lul || ars2.ab || ars2.bp || ars2.rr) {
-    let rawLul = String(ars2.lul || '').replace(/800\s*\/?\s*/g, '').trim(); 
-    let finalLulVal = rawLul ? ('800/' + rawLul) : '800/';
+el('review-raw-btn').addEventListener('click', function(){
+  var block = el('rv-raw-block');
+  var hidden = block.classList.contains('hidden');
+  block.classList.toggle('hidden', !hidden);
+  this.textContent = hidden ? 'HIDE RAW OUTPUT' : 'SHOW RAW OUTPUT';
+});
 
-    let bp = parseInt(ars2.bp) || 0;
-    S.roddedAnodesCum = S.nextShift === 'C' ? 0 : (S.prevRoddedAnode || 0);
+el('review-discard-btn').addEventListener('click', function(){
+  AI_DRAFT = null;
+  el('review-card').style.display = 'none';
+  el('review-panel').innerHTML = '';
+  setStatus('Extraction discarded. Nothing was changed.', '');
+});
 
-    let ars2Str = '\u2022 *LUL* Production (Target/Actual)- '+ finalLulVal +'\n'+
-                  '\u2022Rodded anodes (Cumulative)- '+S.roddedAnodesCum+'(M)\n'+
-                  '\u2022Rods hooked- 0\n'+
-                  '\u2022 *CM*/AB/BP- /'+(ars2.ab || '')+'/'+bp+'\n'+
-                  '\u2022RR/RH/SS/RS- '+(ars2.rr || '')+'\n'+
-                  '\u2022Butt/GS production- '+(bp*0.22).toFixed(0)+' mt';
-                  
-    saveSection('ARS-2 Production', ars2Str, {lul: finalLulVal, ab: ars2.ab||'', bp: ars2.bp||'', rr: ars2.rr||'', ra: ''});
+var AI_LAST_SNAPSHOT = null;
+
+el('review-undo-btn').addEventListener('click', function(){
+  if (!AI_LAST_SNAPSHOT) return;
+  S.data = JSON.parse(JSON.stringify(AI_LAST_SNAPSHOT.data));
+  S.inputs = JSON.parse(JSON.stringify(AI_LAST_SNAPSHOT.inputs));
+  S.roddedAnodesCum = AI_LAST_SNAPSHOT.roddedAnodesCum;
+  S.ars3RaFtd = AI_LAST_SNAPSHOT.ars3RaFtd;
+  AI_LAST_SNAPSHOT = null;
+  this.style.display = 'none';
+  renderGrid();
+  renderPreview();
+  persistState();
+  setStatus('Undone - the report is back to how it was before the apply.', '');
+});
+
+// ---------- APPLY ----------
+el('review-apply-btn').addEventListener('click', function(){
+  if (!AI_DRAFT) return;
+
+  // Snapshot first, so a bad extraction can be rolled back in one click.
+  AI_LAST_SNAPSHOT = {
+    data: JSON.parse(JSON.stringify(S.data)),
+    inputs: JSON.parse(JSON.stringify(S.inputs)),
+    roddedAnodesCum: S.roddedAnodesCum,
+    ars3RaFtd: S.ars3RaFtd
+  };
+  el('review-undo-btn').style.display = 'inline-flex';
+
+  var g = function(id){ var e = el(id); return e ? e.value.trim() : ''; };
+  var touched = [];
+
+  var ars2 = {
+    lul: g('rv_ars2_lul'), ab: g('rv_ars2_ab'), bp: g('rv_ars2_bp'),
+    rr: g('rv_ars2_rr'), ra: g('rv_ars2_ra')
+  };
+  var ars3 = {
+    ars3ra: g('rv_ars3_ars3ra'), ars3sa: g('rv_ars3_ars3sa'), ars3ba: g('rv_ars3_ars3ba')
+  };
+  var bath = {
+    bathprod: g('rv_bath_bathprod'), tanker: g('rv_bath_tanker'), bathstock: g('rv_bath_bathstock')
+  };
+  var wh = {
+    whstock: g('rv_warehouse_whstock'), whsent: g('rv_warehouse_whsent'), whrcv: g('rv_warehouse_whrcv')
+  };
+
+  if (ars2.lul || ars2.ab || ars2.bp || ars2.rr || ars2.ra) {
+    var ra = fmtRoddedAnodes(ars2.ra);
+    S.roddedAnodesCum = S.nextShift === 'C' ? ra.total : (S.prevRoddedAnode || 0) + ra.total;
+    var bp = parseInt(ars2.bp) || 0;
+    S.data['ARS-2 Production'] =
+      '\u2022 *LUL* Production (Target/Actual)- ' + fmtLulDisplay(ars2.lul) + '\n' +
+      '\u2022Rodded anodes (Cumulative)- ' + S.roddedAnodesCum + '(M)\n' +
+      '\u2022Rods hooked- 0\n' +
+      '\u2022 *CM*/AB/BP- ' + ra.display + '/' + ars2.ab + '/' + bp + '\n' +
+      '\u2022RR/RH/SS/RS- ' + ars2.rr + '\n' +
+      '\u2022Butt/GS production- ' + (bp * 0.22).toFixed(0) + ' mt';
+    S.inputs['ARS-2 Production'] = ars2;
+    touched.push('ARS-2 Production');
   }
-  
-  let ars3 = ai.ars3 || {};
-  if(ars3.ars3ra || ars3.ars3sa || ars3.ars3ba) {
-    var fra=parseInt(ars3.ars3ra)||0, fba=parseInt(ars3.ars3ba)||0;
-    var ars3saRaw = String(ars3.ars3sa||'').trim();
-    var fsa = ars3saRaw.endsWith('p') ? parseInt(ars3saRaw) * 4 : parseInt(ars3saRaw)||0;
-    var dra=S.nextShift==='C'?fra:S.prevArs3Ra+fra;
-    var dsa=S.nextShift==='C'?fsa:S.prevArs3Sa+fsa;
-    var dba=S.nextShift==='C'?fba:S.prevArs3Ba+fba;
+
+  if (ars3.ars3ra || ars3.ars3sa || ars3.ars3ba) {
+    var fra = parseInt(ars3.ars3ra) || 0, fba = parseInt(ars3.ars3ba) || 0, fsa = saCount(ars3.ars3sa);
+    var dra = S.nextShift === 'C' ? fra : (S.prevArs3Ra || 0) + fra;
+    var dsa = S.nextShift === 'C' ? fsa : (S.prevArs3Sa || 0) + fsa;
+    var dba = S.nextShift === 'C' ? fba : (S.prevArs3Ba || 0) + fba;
     S.ars3RaFtd = dra;
-    
-    let ars3Str = '*SHIFT: C+A+B*\n'+
-                  'RA production(FTS/FTD): '+fra+'/'+dra+'\n'+
-                  'SA processed: (FTS/FTD)- '+fsa+'/'+dsa+'\n'+
-                  'BA received(sets):(FTS/FTD)- '+fba+'/'+dba;
-                  
-    saveSection('ARS-3 Production', ars3Str, {ars3ra: ars3.ars3ra||'', ars3sa: ars3.ars3sa||'', ars3ba: ars3.ars3ba||''});
+    S.data['ARS-3 Production'] =
+      '*SHIFT: C+A+B*\n' +
+      'RA production(FTS/FTD): ' + fra + '/' + dra + '\n' +
+      'SA processed: (FTS/FTD)- ' + fsa + '/' + dsa + '\n' +
+      'BA received(sets):(FTS/FTD)- ' + fba + '/' + dba;
+    S.inputs['ARS-3 Production'] = ars3;
+    touched.push('ARS-3 Production');
   }
 
-  let bath = ai.bath || {};
-  if(bath.bathprod || bath.tanker || bath.bathstock) {
-    var bp3=parseInt(bath.bathprod)||0, tnk=parseInt(bath.tanker)||0;
-    var tc2=S.nextShift==='C'?tnk:S.prevTankerCum+tnk;
-    var bc2=S.nextShift==='C'?bp3:S.prevBathCum+bp3;
-    let bathStr = '\u2022Bath prod- '+bp3+' mt\n\u2022Cumulative bath- '+bc2+' mt\n'+
-                  '\u2022Tanker- '+tnk+' nos\n\u2022Tankers (cumulative)- '+tc2+' nos\n'+
-                  '\u2022RBS1/RBS2/F1/F2/F3/F4 - '+(bath.bathstock || '');
-    saveSection('Bath Handling', bathStr, {bathprod: bath.bathprod||'', tanker: bath.tanker||'', bathstock: bath.bathstock||''});
+  if (bath.bathprod || bath.tanker || bath.bathstock) {
+    var bp3 = parseInt(bath.bathprod) || 0, tnk = parseInt(bath.tanker) || 0;
+    var tc2 = S.nextShift === 'C' ? tnk : (S.prevTankerCum || 0) + tnk;
+    var bc2 = S.nextShift === 'C' ? bp3 : (S.prevBathCum || 0) + bp3;
+    S.data['Bath Handling'] =
+      '\u2022Bath prod- ' + bp3 + ' mt\n\u2022Cumulative bath- ' + bc2 + ' mt\n' +
+      '\u2022Tanker- ' + tnk + ' nos\n\u2022Tankers (cumulative)- ' + tc2 + ' nos\n' +
+      '\u2022RBS1/RBS2/F1/F2/F3/F4 - ' + bath.bathstock;
+    S.inputs['Bath Handling'] = bath;
+    touched.push('Bath Handling');
   }
 
-  let wh = ai.warehouse || {};
-  if(wh.whstock || wh.whsent || wh.whrcv) {
-    let whStr = '\u2022 RAP/SAP/EBB/EAP - '+(wh.whstock||'')+'\n'+
-                '\u2022 Sent RA/EB - '+(wh.whsent||'')+'\n'+
-                '\u2022 Rec SA/SB - '+(wh.whrcv||'');
-    saveSection('Warehouse', whStr, {whstock: wh.whstock||'', whsent: wh.whsent||'', whrcv: wh.whrcv||''});
+  if (wh.whstock || wh.whsent || wh.whrcv) {
+    S.data['Warehouse'] =
+      '\u2022 RAP/SAP/EBB/EAP - ' + wh.whstock + '\n' +
+      '\u2022 Sent RA/EB - ' + wh.whsent + '\n' +
+      '\u2022 Rec SA/SB - ' + wh.whrcv;
+    S.inputs['Warehouse'] = wh;
+    touched.push('Warehouse');
   }
-}
+
+  var bdText = g('rv_bd');
+  if (bdText) {
+    var existing = S.data['Breakdowns'];
+    var append = existing ? el('rv_bd_append') && el('rv_bd_append').checked : false;
+    S.data['Breakdowns'] = append ? existing + '\n' + bdText : bdText;
+    S.inputs['Breakdowns'] = Object.assign(S.inputs['Breakdowns'] || {}, { bd1: bdText });
+    touched.push('Breakdowns');
+  }
+
+  var sbh = g('rv_sbh_mill');
+  if (sbh) {
+    var sbhExisting = S.data['SBH & Mill'];
+    var sbhAppend = sbhExisting ? el('rv_sbh_append') && el('rv_sbh_append').checked : false;
+    S.data['SBH & Mill'] = sbhAppend ? sbhExisting + '\n' + sbh : sbh;
+    S.inputs['SBH & Mill'] = Object.assign(S.inputs['SBH & Mill'] || {}, { sbh_data: sbh });
+    touched.push('SBH & Mill');
+  }
+
+  var rmt = g('rv_rmt');
+  if (rmt) {
+    var rmtExisting = S.data['RMT'];
+    var rmtAppend = rmtExisting ? el('rv_rmt_append') && el('rv_rmt_append').checked : false;
+    S.data['RMT'] = rmtAppend ? rmtExisting + '\n' + rmt : rmt;
+    S.inputs['RMT'] = Object.assign(S.inputs['RMT'] || {}, { rmt_data: rmt });
+    touched.push('RMT');
+  }
+
+  S.data['Total RA Cumulative'] = '(Ars-2+Ars-3)=' + (S.roddedAnodesCum || 0) + '+' + (S.ars3RaFtd || 0) + '=' +
+    ((S.roddedAnodesCum || 0) + (S.ars3RaFtd || 0));
+
+  renderGrid();
+  renderPreview();
+  persistState();
+
+  AI_DRAFT = null;
+  el('review-card').style.display = 'none';
+  el('review-panel').innerHTML = '';
+  setStatus(touched.length
+    ? 'Applied to: ' + touched.join(', ') + '. Open any section to correct a value.'
+    : 'Nothing to apply - no values were filled in.', touched.length ? 'ok' : 'err');
+});
+
+// ---------- MAIN EXTRACT ----------
+el('ai-process-btn').addEventListener('click', async function(){
+  var apiKey = (INJECTED_KEY && !INJECTED_KEY.startsWith('__'))
+    ? INJECTED_KEY
+    : (localStorage.getItem('ars_groq_api_key') || el('groq-key-input').value.trim());
+
+  if (!apiKey) {
+    el('key-config-wrap').style.display = 'block';
+    alert('Add a Groq API key (starts with gsk_...) under the API Key button to run extraction in your browser.');
+    return;
+  }
+
+  if (!AI_IMG.prod.length && !AI_IMG.bd.length) {
+    alert('Select a production sheet image, a breakdown image, or both.');
+    return;
+  }
+
+  var btn = el('ai-process-btn');
+  btn.disabled = true;
+  el('ai-loader').classList.add('active');
+  el('review-card').style.display = 'none';
+  var notes = [];
+  var rawParts = [];
+  var merged = {};
+
+  try {
+    if (AI_IMG.prod.length) {
+      setStatus('Production: preparing ' + AI_IMG.prod.length + ' image(s)…');
+      var pr = await runExtraction(apiKey, 'Production', PROD_PROMPT, AI_IMG.prod, setStatus);
+      merged = mergeExtraction(merged, pr.merged);
+      rawParts.push('===== PRODUCTION (' + pr.model + ') =====\n' + pr.raw);
+      if (pr.merged.notes) notes.push('Production: ' + pr.merged.notes);
+    }
+
+    if (AI_IMG.bd.length) {
+      setStatus('Breakdown: preparing ' + AI_IMG.bd.length + ' image(s)…');
+      var br = await runExtraction(apiKey, 'Breakdown', BD_PROMPT, AI_IMG.bd, setStatus);
+      merged = mergeExtraction(merged, br.merged);
+      rawParts.push('===== BREAKDOWN (' + br.model + ') =====\n' + br.raw);
+      if (br.merged.notes) notes.push('Breakdown: ' + br.merged.notes);
+    }
+
+    var anyValue = Object.keys(merged).some(function(k){ return k !== 'notes'; });
+    if (!anyValue) {
+      setStatus('The model ran but found no readable data. Try a sharper or better-lit image, or add a page.', 'err');
+      return;
+    }
+    openReview(merged, rawParts.join('\n\n'), notes.join('\n'));
+  } catch (error) {
+    setStatus('Extraction failed:\n' + groqErrorFriendly(error), 'err');
+  } finally {
+    btn.disabled = false;
+    el('ai-loader').classList.remove('active');
+  }
+});
 
 // ===== GRID & PREVIEW =====
 function renderGrid() {
@@ -938,7 +1550,7 @@ function renderGrid() {
 function renderPreview() {
   var filled = SECTIONS.filter(function(s){ return S.data[s] !== null && S.data[s] !== undefined; });
   var card = el('preview-card');
-  if (filled.length === 0) { card.style.display = 'none'; return; }
+  if (filled.length === 0) { card.style.display = 'none'; el('preview-content').textContent = ''; return; }
   card.style.display = 'block';
   var text = '*Date:-' + S.nextDate + '*\n*Shift:-' + S.nextShift + '*\n\n';
   filled.forEach(function(sec){
