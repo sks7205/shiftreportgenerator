@@ -1135,7 +1135,7 @@ async function runExtraction(apiKey, label, promptText, items, onProgress) {
 // ---------- PROMPTS ----------
 const PROD_PROMPT = [
   'You extract handwritten Anode Rodding Shop (ARS) production shift data from logbook pages.',
-  'Analyze the handwriting carefully across all columns. Look for short alphanumeric pairs like "LUL-528", "P-289", "RAP- 530".',
+  'Analyze the handwriting carefully across all columns. Look for short alphanumeric pairs like "LUL-528", "P- 289", "T- 16", "RAP- 530".',
   '',
   'FIELD EXTRACTION RULES:',
   '1. ARS-2 Section:',
@@ -1150,9 +1150,9 @@ const PROD_PROMPT = [
   '   - "ars3sa": ARS-3 SA processed integer number (e.g., SA-704 -> 704), or null if absent.',
   '   - "ars3ba": ARS-3 BA received sets integer number, or null if absent.',
   '',
-  '3. Bath Handling Section:',
-  '   - "p": Bath production integer number after P- (e.g., 289), or null if absent.',
-  '   - "t": Tankers count integer number after T- (e.g., T-16 -> 16), or null if absent.',
+  '3. Bath Handling Section (MAPPING P & T):',
+  '   - "bathprod": Extract the exact number written after "P-" or "P - " (e.g., "P- 289" -> 289). Put this into "bathprod". Must be an integer number.',
+  '   - "tanker": Extract the exact number written after "T-" or "T - " (e.g., "T- 16" -> 16). NOTE: The handwritten digit 1 may look like a lowercase t (e.g., "t6" is 16). Put this into "tanker". Must be an integer number.',
   '   - "bathstock": Look for R1, R2, F1, F2, F3, F4 numbers and format strictly as "R1/R2/F1/F2/F3/F4" (e.g., "94/84/225/82/202/00").',
   '',
   '4. Warehouse Section:',
@@ -1164,18 +1164,18 @@ const PROD_PROMPT = [
   '   - "sheet": Extract date/shift if written; otherwise use null.',
   '   - "sbh_mill", "rmt", "notes": Short string descriptions or empty string "".',
   '',
-  'Return ONLY valid JSON matching this schema:',
+  'Return ONLY valid JSON matching this exact structure:',
   '{',
   '  "sheet": { "date": null, "shift": null },',
   '  "ars2": { "lul": "800/528", "ab": 560, "bp": 570, "rr": "70/74/38/33", "ra": null },',
   '  "ars3": { "ars3ra": null, "ars3sa": 704, "ars3ba": null },',
-  '  "bath": { "p": 289, "t": 16, "bathstock": "94/84/225/82/202/00" },',
+  '  "bath": { "bathprod": 289, "tanker": 16, "bathstock": "94/84/225/82/202/00" },',
   '  "warehouse": { "whstock": "530/468/120/32", "whsent": "684/84", "whrcv": "616/75" },',
   '  "sbh_mill": "",',
   '  "rmt": "",',
   '  "notes": ""',
   '}',
-  'Use raw numbers (integers) for all individual counts and metrics. Do not wrap JSON in markdown code blocks.'
+  'Do not wrap the JSON in markdown code blocks.'
 ].join('\n');
 
 const BD_PROMPT = [
