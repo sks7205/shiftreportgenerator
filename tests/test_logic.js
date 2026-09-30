@@ -156,7 +156,7 @@ eq('disagreement is flagged for the operator',
   /sheet heading disagrees between pages: 28\/09\/2026 vs 29\/09\/2026/.test(String(clash.notes)), true);
 eq('null sheet ignored', api.mergeExtraction({ ars2: { bp: '1' } }, { sheet: null }).sheet, undefined);
 
-console.log('--- one-click: sheet heading readers and the shift that precedes ---');
+console.log('--- sheet heading readers and the preceding shift ---');
 eq('slash date', api.normSheetDate('28/09/2026'), '28/09/2026');
 eq('single digit padded', api.normSheetDate('28/9/2026'), '28/09/2026');
 eq('2-digit year', api.normSheetDate('28/9/26'), '28/09/2026');
