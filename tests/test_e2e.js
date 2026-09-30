@@ -28,7 +28,7 @@ window.fetch = function (url, opts) {
   const body = JSON.parse(opts.body);
   const prompt = body.messages[0].content[0].text;
   const isProd = /PRODUCTION SHEET/.test(prompt);
-  calls.push({ model: body.model, images: body.messages[0].content.length - 1, isProd, json: !!body.response_format });
+  calls.push({ model: body.model, images: body.messages[0].content.length - 1, isProd, json: !!body.response_format, prompt });
   const content = isProd
     ? JSON.stringify({ ars2: { lul: '800/400, 400', ab: '3', bp: '22', rr: '2/1/0/0', ra: '120,130' },
                        ars3: { ars3ra: '80', ars3sa: '50p', ars3ba: '4' },
@@ -134,13 +134,19 @@ const PREV_REPORT = [
   ok('uses a live vision model, not the dead id', calls.every(c => c.model === 'qwen/qwen3.8-27b'), JSON.stringify(calls.map(c => c.model)));
   ok('JSON mode requested', calls.every(c => c.json));
   ok('review card is open', $('review-card').style.display === 'block');
+  ok('production prompt explicitly scans every column and section', /ENTIRE image, not just the first\/leftmost column/.test(calls.find(c => c.isProd).prompt) && /Warehouse \(stock, sent, received\)/.test(calls.find(c => c.isProd).prompt));
   ok('status shows success', /review/i.test($('extract-status').textContent), $('extract-status').textContent);
 
   console.log('--- review panel content ---');
   eq('LUL carried into review', $('rv_ars2_lul').value, '800/400, 400');
   eq('rodded anodes carried', $('rv_ars2_ra').value, '120,130');
   eq('SA value carried', $('rv_ars3_ars3sa').value, '50p');
+  eq('bath production carried', $('rv_bath_bathprod').value, '361');
+  eq('tankers carried', $('rv_bath_tanker').value, '9');
   eq('bath stock carried', $('rv_bath_bathstock').value, '115/157/420/457/475/450');
+  eq('warehouse stock carried', $('rv_warehouse_whstock').value, '316/353/8/3');
+  eq('warehouse sent carried', $('rv_warehouse_whsent').value, '612/94');
+  eq('warehouse received carried', $('rv_warehouse_whrcv').value, '692/102');
   const bdLines = $('rv_bd').value.split('\n');
   eq('three breakdown events', bdLines.length, 3);
   ok('event 1 formatted with times', /^\*Loop-7, torque overload\(2:30PM-2:45PM\)/.test(bdLines[0]), bdLines[0]);
