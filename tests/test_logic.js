@@ -24,8 +24,10 @@ function grab(name) {
 }
 
 const need = ['normTime','breakdownDeviations','formatBreakdownEvent','normaliseBreakdowns',
-  'fmtLulDisplay','fmtRoddedAnodes','saCount','mergeExtraction','mergeNumericSection','parseLooseJson',
-  'chunk','shiftWindowForDate','matchTimePair',
+  'fmtLulDisplay','fmtRoddedAnodes','saCount','mergeExtraction','mergeNumericSection','shiftWindowForDate','matchTimePair',
+  'normaliseOcrLines','cleanOcrNumber','ocrNumberTokens','firstOcrValue','firstOcrNumber','valueAfterOcrLabel','numberAfterOcrLabel',
+  'textAfterOcrLabel','valuesAfterOcrMarker','isOcrSectionHeading','ocrSection','ocrSequenceOrNamed',
+  'extractProductionOcr','isBreakdownOcrLine','splitOcrEquipmentIssue','extractBreakdownOcr',
   'normSheetDate','normSheetShift','prevShiftOf','nextShiftCalc'];
 const regexConsts = (src.match(/var TIME_PAIR_RE = [\s\S]*?var TIME_ADJ_RE = [^\n]*/) || [''])[0];
 if (!regexConsts) throw new Error('time regex constants not found');
@@ -48,7 +50,7 @@ function to12hr(hhmm) {
   return h12 + ':' + String(p[1]).padStart(2, '0') + ap;
 }
 
-const api = eval('(function(Date){' + code + '\n;return {normTime,breakdownDeviations,formatBreakdownEvent,normaliseBreakdowns,fmtLulDisplay,fmtRoddedAnodes,saCount,mergeExtraction,parseLooseJson,chunk,shiftWindowForDate,matchTimePair,normSheetDate,normSheetShift,prevShiftOf,nextShiftCalc};})')(FakeDate);
+const api = eval('(function(Date){' + code + '\n;return {normTime,breakdownDeviations,formatBreakdownEvent,normaliseBreakdowns,fmtLulDisplay,fmtRoddedAnodes,saCount,mergeExtraction,shiftWindowForDate,matchTimePair,normaliseOcrLines,cleanOcrNumber,ocrNumberTokens,firstOcrValue,firstOcrNumber,valueAfterOcrLabel,numberAfterOcrLabel,textAfterOcrLabel,valuesAfterOcrMarker,isOcrSectionHeading,ocrSection,ocrSequenceOrNamed,extractProductionOcr,isBreakdownOcrLine,splitOcrEquipmentIssue,extractBreakdownOcr,normSheetDate,normSheetShift,prevShiftOf,nextShiftCalc};})')(FakeDate);
 
 let pass = 0, fail = 0;
 function eq(label, got, want) {
@@ -80,9 +82,35 @@ eq('SA p = x4', api.saCount('50p'), 200);
 eq('SA plain', api.saCount('200'), 200);
 eq('SA empty', api.saCount(''), 0);
 
-console.log('--- chunk (Groq caps vision requests at 3 images) ---');
-eq('7 imgs -> 3+3+1', api.chunk([1,2,3,4,5,6,7], 3).map(b => b.length), [3,3,1]);
-eq('no imgs -> one empty batch', api.chunk([], 3), [[]]);
+console.log('--- local OCR production field parsing ---');
+const localProduction = api.extractProductionOcr([
+  'Date: 27/09/2026', 'Shift: B', 'ARS-2 PRODUCTION',
+  'LUL Production: 800/400, 400', 'AB: 3', 'BP: 22', 'RR/RH/SS/RS: 2/1/0/0',
+  'Rodded Anodes CM1: 120 CM2: 130', 'ARS-3 PRODUCTION',
+  'RA production(FTS/FTD): 80/80', 'SA processed: (FTS/FTD)- 50p/200', 'BA received(sets):(FTS/FTD)- 4/14',
+  'BATH HANDLING', 'P-361', 'T-9', 'RBS1/RBS2/F1/F2/F3/F4 - 115/157/420/457/475/450',
+  'WAREHOUSE', 'RAP/SAP/EBB/EAP - 316/353/8/3', 'RA/EB Sent - 612/94',
+  'SA/SB Received - 692/102', 'SBH & Mill: mill running'
+].join('\n'));
+eq('LUL ratio and separate CM1/CM2 read', [localProduction.ars2.lul, localProduction.ars2.ra], ['800/400,400','120,130']);
+eq('ARS-2 values read in field order', [localProduction.ars2.ab, localProduction.ars2.bp, localProduction.ars2.rr], ['3','22','2/1/0/0']);
+eq('ARS-3 values use first shift value from FTS/FTD ratios', [localProduction.ars3.ars3ra, localProduction.ars3.ars3sa, localProduction.ars3.ars3ba], ['80','50p','4']);
+eq('bath values and all six stock cells read', localProduction.bath, { bathprod:'361', tanker:'9', bathstock:'115/157/420/457/475/450' });
+eq('warehouse grouped stock, sent and received values read', localProduction.warehouse, { whstock:'316/353/8/3', whsent:'612/94', whrcv:'692/102' });
+eq('heading and prose fields parsed', [localProduction.sheet, localProduction.sbh_mill], [{date:'27/09/2026',shift:'B'},'mill running']);
+eq('OCR corrects common O/l digit confusions', api.cleanOcrNumber('1O|'), '101');
+
+console.log('--- local OCR breakdown rows ---');
+const localBreakdown = api.extractBreakdownOcr([
+  'Equipment Description Start End',
+  'Loop-7, torque overload 14:30:00 14:45:00',
+  'BC-11 choke 16:00 16:20',
+  'Furnace-2 trip operator reset'
+].join('\n'));
+eq('three breakdown rows retained, headings ignored', localBreakdown.events.length, 3);
+eq('equipment and issue separated from OCR text', [localBreakdown.events[0].equipment, localBreakdown.events[0].issue], ['Loop-7','torque overload']);
+eq('times normalized from OCR text', [localBreakdown.events[0].start, localBreakdown.events[0].end], ['14:30','14:45']);
+eq('untimed equipment row retained', [localBreakdown.events[2].equipment, localBreakdown.events[2].issue], ['Furnace-2','trip operator reset']);
 
 console.log('--- mergeExtraction: a 2-page sheet must not double count ---');
 const page1 = { ars2: { lul: '800/400, 400p', ab: '1', bp: '10', rr: '', ra: '' },
@@ -135,13 +163,6 @@ const winC = api.shiftWindowForDate();
 eq('C window is 22:00-06:00 next day', [winC[0].getHours(), winC[1].getHours()], [22, 6]);
 eq('C window end rolls to next day', winC[1].getDate(), 29);
 S.nextShift = 'B';
-
-console.log('--- parseLooseJson (models fence or chat around JSON) ---');
-eq('plain', api.parseLooseJson('{"a":1}'), { a: 1 });
-eq('fenced', api.parseLooseJson('```json\n{"a":2}\n```'), { a: 2 });
-eq('prose-wrapped', api.parseLooseJson('Here you go: {"a":3} hope that helps'), { a: 3 });
-try { api.parseLooseJson('no json at all'); fail++; console.log('  FAIL non-JSON should throw'); }
-catch (e) { if (/did not return valid JSON/.test(e.message)) { pass++; console.log('  ok   non-JSON throws readable error'); } else { fail++; console.log('  FAIL wrong error: ' + e.message); } }
 
 console.log('--- sheet heading survives the batch merge (first page wins) ---');
 eq('heading kept across batches',

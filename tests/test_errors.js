@@ -1,4 +1,4 @@
-// Error-path and fallback tests for the extraction flow.
+// Error-path tests for the local, no-AI OCR extraction flow.
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
@@ -11,7 +11,8 @@ function ok(label, cond, extra) {
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-function boot(fetchImpl) {
+function boot(options) {
+  options = options || {};
   const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://example.test/index.html', pretendToBeVisual: true });
   const { window } = dom, doc = window.document;
   window.URL.createObjectURL = () => 'blob:mock';
@@ -19,11 +20,29 @@ function boot(fetchImpl) {
   class FakeImage { set src(v) { this.width = 800; this.height = 600; setTimeout(() => this.onload && this.onload(), 0); } }
   window.Image = FakeImage;
   window.HTMLCanvasElement.prototype.getContext = () => ({ fillRect() {}, drawImage() {} });
-  window.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/jpeg;base64,QUJD';
-  let alerted = null;
+  let alerted = null, networkCalls = 0, workerCalls = 0;
   window.alert = m => { alerted = m; };
-  window.fetch = fetchImpl;
-  return { window, doc, $: id => doc.getElementById(id), alerted: () => alerted };
+  window.fetch = () => { networkCalls++; return Promise.reject(new Error('Unexpected remote request')); };
+  if (!options.noEngine) {
+    window.Tesseract = {
+      createWorker: async function(language, oem, workerOptions) {
+        workerCalls++;
+        if (options.createWorkerError) throw new Error(options.createWorkerError);
+        return {
+          setParameters: async () => {},
+          recognize: async () => {
+            if (options.recognizeError) throw new Error(options.recognizeError);
+            return { data: { text: options.text || '', confidence: options.confidence === undefined ? 80 : options.confidence } };
+          },
+          terminate: async () => {}
+        };
+      }
+    };
+  }
+  return {
+    window, doc, $: id => doc.getElementById(id), alerted: () => alerted,
+    networkCalls: () => networkCalls, workerCalls: () => workerCalls
+  };
 }
 
 function addProd($) {
@@ -33,114 +52,76 @@ function addProd($) {
   input.dispatchEvent(new ($('prod-img').ownerDocument.defaultView.Event)('change'));
 }
 
-function jsonResponse(content) {
-  return { ok: true, status: 200, json: () => Promise.resolve({ choices: [{ message: { content } }] }) };
-}
-function errResponse(status, message) {
-  return { ok: false, status, json: () => Promise.resolve({ error: { message } }) };
-}
-
 (async function () {
-  console.log('--- every vision model decommissioned ---');
+  console.log('--- missing local OCR engine ---');
   {
-    const t = boot(() => Promise.resolve(errResponse(400, 'The model `qwen/qwen3.8-27b` has been decommissioned and is no longer supported.')));
-    await wait(60);
-    addProd(t.$); t.$('groq-key-input').value = 'gsk_x';
+    const t = boot({ noEngine: true });
+    await wait(40);
+    addProd(t.$);
     t.$('ai-process-btn').click();
-    await wait(300);
-    const s = t.$('extract-status') ? t.$('extract-status').textContent : '<<NULL ELEMENT>>';
-    ok('fails gracefully', /Extraction failed/.test(s), s);
-    ok('surfaces the model error', /decommissioned/.test(s), s);
-    ok('tells the operator what to do', /own model id|API Key/i.test(s), s);
-    ok('status styled as an error', t.$('extract-status').className.includes('err'));
-    ok('button re-enabled for a retry', t.$('ai-process-btn').disabled === false);
+    await wait(150);
+    ok('explains that bundled OCR did not load', /local OCR engine|Tesseract/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    ok('offers a retry hint', /reload|vendor\/ocr/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    ok('button is re-enabled', t.$('ai-process-btn').disabled === false);
+    ok('does not contact a remote API', t.networkCalls() === 0);
   }
 
-  console.log('--- first model 400s, second works (fallback) ---');
+  console.log('--- local OCR engine initialization failure ---');
   {
-    let n = 0;
-    const t = boot(() => {
-      n++;
-      if (n === 1) return Promise.resolve(errResponse(400, 'model not found'));
-      return Promise.resolve(jsonResponse(JSON.stringify({ ars2: { bp: '7' } })));
-    });
-    await wait(60);
-    addProd(t.$); t.$('groq-key-input').value = 'gsk_x';
+    const t = boot({ createWorkerError: 'Failed to initialize Tesseract worker' });
+    await wait(40);
+    addProd(t.$);
     t.$('ai-process-btn').click();
-    await wait(300);
-    ok('fell back to the second model', t.$('review-card').style.display === 'block', t.$('extract-status').textContent);
-    ok('recovered value shown', t.$('rv_ars2_bp').value === '7', t.$('rv_ars2_bp').value);
+    await wait(150);
+    ok('worker failure is surfaced', /OCR extraction failed|Tesseract/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    ok('no result card is shown', t.$('review-card').style.display === 'none');
+    ok('worker initialization was attempted', t.workerCalls() === 1);
   }
 
-  console.log('--- rate limited ---');
+  console.log('--- OCR confidence and extracted value are visible for review ---');
   {
-    const t = boot(() => Promise.resolve(errResponse(429, 'Rate limit reached for qwen/qwen3.8-27b')));
-    await wait(60);
-    addProd(t.$); t.$('groq-key-input').value = 'gsk_x';
+    const t = boot({ text: 'ARS-2 PRODUCTION\nLUL: 700/500', confidence: 24 });
+    await wait(40);
+    addProd(t.$);
     t.$('ai-process-btn').click();
-    await wait(300);
-    ok('does not silently retry other models on 429', t.$('review-card').style.display === 'none');
-    ok('rate-limit hint shown', /Rate limited/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    await wait(200);
+    ok('review is shown even for low confidence so operator can correct it', t.$('review-card').style.display === 'block');
+    ok('parsed value is editable', t.$('rv_ars2_lul').value === '700/500', t.$('rv_ars2_lul').value);
+    ok('low OCR confidence is recorded in raw transcript', /confidence 24%/.test(t.$('rv-raw-block').textContent));
+    ok('operator warning is explicit', /verify every value/i.test(t.$('review-panel').textContent));
   }
 
-  console.log('--- bad API key ---');
+  console.log('--- OCR finds no readable values ---');
   {
-    const t = boot(() => Promise.resolve(errResponse(401, 'Invalid API Key')));
-    await wait(60);
-    addProd(t.$); t.$('groq-key-input').value = 'gsk_bad';
+    const t = boot({ text: '', confidence: 0 });
+    await wait(40);
+    addProd(t.$);
     t.$('ai-process-btn').click();
-    await wait(300);
-    ok('points at the API key setting', /API key/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    await wait(200);
+    ok('asks for a clearer image or manual entry', /raw OCR text|manually/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    ok('opens review so the raw OCR output is still accessible', t.$('review-card').style.display === 'block' && t.$('rv-raw-block').textContent.includes('p.jpg'));
+    ok('manual fields remain available when OCR finds no data', !!t.$('rv_ars2_lul') && !!t.$('rv_bd'));
   }
 
-  console.log('--- model returns prose instead of JSON ---');
+  console.log('--- OCR recognition runtime failure ---');
   {
-    const t = boot(() => Promise.resolve(jsonResponse('I cannot read this image clearly enough.')));
-    await wait(60);
-    addProd(t.$); t.$('groq-key-input').value = 'gsk_x';
+    const t = boot({ recognizeError: 'WASM memory allocation failed' });
+    await wait(40);
+    addProd(t.$);
     t.$('ai-process-btn').click();
-    await wait(300);
-    ok('reports unreadable output', /did not return valid JSON/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
-    ok('no bogus review panel', t.$('review-card').style.display === 'none');
-  }
-
-  console.log('--- model returns JSON but finds nothing ---');
-  {
-    const t = boot(() => Promise.resolve(jsonResponse('{}')));
-    await wait(60);
-    addProd(t.$); t.$('groq-key-input').value = 'gsk_x';
-    t.$('ai-process-btn').click();
-    await wait(300);
-    ok('asks for a better image', /sharper|readable/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
-  }
-
-  console.log('--- network failure ---');
-  {
-    const t = boot(() => Promise.reject(new Error('Failed to fetch')));
-    await wait(60);
-    addProd(t.$); t.$('groq-key-input').value = 'gsk_x';
-    t.$('ai-process-btn').click();
-    await wait(300);
-    ok('network error surfaced', /Failed to fetch/.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    await wait(200);
+    ok('recognition error is visible', /WASM memory allocation failed/i.test(t.$('extract-status').textContent), t.$('extract-status').textContent);
+    ok('button is re-enabled after failure', t.$('ai-process-btn').disabled === false);
   }
 
   console.log('--- guards ---');
   {
-    const t = boot(() => Promise.resolve(jsonResponse('{}')));
-    await wait(60);
-    t.$('groq-key-input').value = 'gsk_x';
+    const t = boot({ text: 'LUL: 500/400' });
+    await wait(40);
     t.$('ai-process-btn').click();
-    await wait(200);
-    ok('no images -> warns instead of calling the API', /select a production sheet image/i.test(t.alerted()), String(t.alerted()));
-  }
-  {
-    const t = boot(() => Promise.resolve(jsonResponse('{}')));
-    await wait(60);
-    addProd(t.$);
-    t.$('ai-process-btn').click();   // no key entered
-    await wait(200);
-    ok('no key -> asks for a key', /API key/i.test(t.alerted()), String(t.alerted()));
-    ok('key panel opened', t.$('key-config-wrap').style.display === 'block');
+    await wait(100);
+    ok('no images -> warns instead of running OCR', /select a production sheet image/i.test(t.alerted()), String(t.alerted()));
+    ok('no API key or AI key field exists', !t.$('gemini-key-input') && !t.$('groq-key-input'));
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
