@@ -126,24 +126,15 @@ textarea{resize:vertical;min-height:80px;}
       </div>
       <div class="info-box" id="shift-info-box">Loading...</div>
       
-      <!-- AI Zone Direct Client-Side Groq -->
+      <!-- Local OCR extraction zone -->
       <div class="ai-zone">
         <div class="loader-overlay" id="ai-loader">
           <div class="spinner"></div>
-          <div id="ai-loader-msg" style="font-size:12px;font-weight:700;color:var(--accent2);">Extracting directly with Vision AI...</div>
+          <div id="ai-loader-msg" style="font-size:12px;font-weight:700;color:var(--accent2);">Starting local OCR engine...</div>
         </div>
 
-        <div class="ai-zone-title" style="justify-content:space-between;">
-          <span>&#10024; AI Auto-Extract (Direct Groq Vision)</span>
-          <button class="btn btn-secondary btn-sm" id="key-cfg-btn" style="padding:2px 8px; font-size:10px;">⚙️ API Key</button>
-        </div>
-
-        <div id="key-config-wrap" style="display:none; background:var(--surface2); padding:10px; border-radius:6px; margin-bottom:12px; border:1px solid var(--border);">
-          <label style="font-size:11px;">Groq API Key (Or injected via GitHub Secret)</label>
-          <div style="display:flex; gap:8px;">
-            <input type="password" id="groq-key-input" placeholder="gsk_..." style="margin-bottom:0;">
-            <button class="btn btn-primary btn-sm" id="save-key-btn">Save Key</button>
-          </div>
+        <div class="ai-zone-title">
+          <span>&#128270; Local OCR Auto-Extract (No Cloud AI/API Key)</span>
         </div>
         
         <div class="upload-grid">
@@ -167,7 +158,7 @@ textarea{resize:vertical;min-height:80px;}
           </div>
         </div>
 
-        <div class="info-box" style="font-size:11px;">Add every page of the sheet &mdash; images are sent in batches of 3 and merged, so multi-page production sheets and multi-page breakdown logs both work.</div>
+        <div class="info-box" style="font-size:11px;">Add every page of the sheet. OCR runs locally in this browser with no AI service or API key. It works best on clear printed text; handwritten entries can be misread, so verify every value in the review panel before applying.</div>
 
         <button class="btn btn-ai" id="ai-process-btn">&#9889; Extract Production &amp; Breakdown</button>
         <div class="extract-status" id="extract-status" style="display:none;"></div>
@@ -179,7 +170,7 @@ textarea{resize:vertical;min-height:80px;}
           <span>&#128269; Review Extraction</span>
           <button class="btn btn-secondary btn-sm" id="review-raw-btn">SHOW RAW OUTPUT</button>
         </div>
-        <div class="info-box">Check every value below, edit anything the model mis-read, then press <b>APPLY TO SECTIONS</b>. Nothing is written to the report until you do.</div>
+        <div class="info-box">Check every value below, correct anything OCR misread, then press <b>APPLY TO SECTIONS</b>. Nothing is written to the report until you do.</div>
         <div id="review-panel"></div>
         <div class="btn-row">
           <button class="btn btn-success" id="review-apply-btn">&#10004; APPLY TO SECTIONS</button>
@@ -314,6 +305,7 @@ textarea{resize:vertical;min-height:80px;}
   </div>
 </div>
 
+<script src="./vendor/ocr/tesseract.min.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", async function() {
 
@@ -826,48 +818,15 @@ el('preview-toggle-btn').addEventListener('click', function(){
   this.textContent = hidden ? 'HIDE' : 'SHOW';
 });
 
-// ===== DIRECT CLIENT-SIDE VISION EXTRACTION (GROQ API) =====
-// Two independent passes: PRODUCTION sheet and SAP BREAKDOWN log.
-// Each pass gets its own focused prompt, is batched 3 images per request
-// (Groq vision limit) and is merged. Nothing is written to the report
-// until the operator reviews the result in the review panel.
-const INJECTED_KEY = "__GROQ_API_KEY__";
-const STORED_KEY = localStorage.getItem('ars_groq_api_key') || '';
-if(STORED_KEY) el('groq-key-input').value = STORED_KEY;
-
-// Groq retires vision models quickly - try these in order and stick with
-// whichever one answers. llama-3.2-11b-vision was decommissioned 14 Apr 2025.
-const GROQ_MODELS = ['qwen/qwen3.8-27b', 'meta-llama/llama-4-scout-17b-16e-instruct'];
-const MAX_IMAGES_PER_REQUEST = 3;
-const MAX_IMAGE_EDGE = 2600;
-const JPEG_QUALITY = 0.90;
-
+// ===== LOCAL, NON-GENERATIVE OCR EXTRACTION =====
+// Tesseract.js and its English data are served from this repository and run
+// in a browser worker. No image or API key is sent to an AI provider.
+const OCR_MAX_EDGE = 3200;
+const OCR_TARGET_EDGE = 2400;
+const OCR_LANG = 'eng';
 var AI_IMG = { prod: [], bd: [] };
 var AI_DRAFT = null;   // { merged, raw, snapshot, notes }
-
-// The secret baked in at deploy time wins; otherwise use the key saved in this browser.
-function getGroqKey() {
-  if (INJECTED_KEY && !INJECTED_KEY.startsWith('__')) return INJECTED_KEY;
-  var fromInput = el('groq-key-input') ? el('groq-key-input').value.trim() : '';
-  try { return localStorage.getItem('ars_groq_api_key') || fromInput; }
-  catch (e) { return fromInput; }
-}
-
-el('key-cfg-btn').addEventListener('click', function(){
-  var wrap = el('key-config-wrap');
-  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
-});
-
-el('save-key-btn').addEventListener('click', function(){
-  var k = el('groq-key-input').value.trim();
-  if(!k) {
-    alert("Please enter a valid Groq API key.");
-    return;
-  }
-  localStorage.setItem('ars_groq_api_key', k);
-  el('key-config-wrap').style.display = 'none';
-  alert("API Key saved in this browser only.");
-});
+var AI_OCR_WORKER = null;
 
 // ---------- MULTI-IMAGE UPLOAD ----------
 function renderThumbs(kind) {
@@ -923,31 +882,31 @@ function setupImageUpload(kind, inputId) {
 setupImageUpload('prod', 'prod-img');
 setupImageUpload('bd', 'bd-img');
 
-function getCompressedBase64(file, maxDimension, quality) {
-  maxDimension = maxDimension || MAX_IMAGE_EDGE;
-  quality = quality || JPEG_QUALITY;
+function getOcrCanvas(file) {
   return new Promise(function(resolve, reject){
     var reader = new FileReader();
     reader.onload = function(e){
       var img = new Image();
       img.onload = function(){
-        var width = img.width, height = img.height;
-        if (!width || !height) { reject(new Error('Could not read image dimensions.')); return; }
-        if (width > maxDimension || height > maxDimension) {
-          if (width > height) { height = Math.round((height * maxDimension) / width); width = maxDimension; }
-          else { width = Math.round((width * maxDimension) / height); height = maxDimension; }
-        }
+        var sourceWidth = img.naturalWidth || img.width;
+        var sourceHeight = img.naturalHeight || img.height;
+        if (!sourceWidth || !sourceHeight) { reject(new Error('Could not read image dimensions.')); return; }
+        var longest = Math.max(sourceWidth, sourceHeight);
+        var scale = Math.min(OCR_MAX_EDGE / longest, Math.max(1, OCR_TARGET_EDGE / longest));
+        var width = Math.max(1, Math.round(sourceWidth * scale));
+        var height = Math.max(1, Math.round(sourceHeight * scale));
         var canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
+        canvas.width = width;
+        canvas.height = height;
+        canvas.dataset.sourceName = file.name || '';
         var ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Could not prepare this image for OCR.')); return; }
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, width, height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
-        try {
-          resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
-        } catch(err) {
-          reject(new Error('Could not encode image for upload.'));
-        }
+        resolve(canvas);
       };
       img.onerror = function(){ reject(new Error('Unsupported or corrupt image file.')); };
       img.src = e.target.result;
@@ -957,83 +916,305 @@ function getCompressedBase64(file, maxDimension, quality) {
   });
 }
 
-// ---------- GROQ TRANSPORT ----------
-function parseLooseJson(txt) {
-  if (txt === null || txt === undefined) throw new Error('Empty response from model.');
-  var s = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();
-  try { return JSON.parse(s); } catch(e) {}
-  var a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a !== -1 && b > a) {
-    try { return JSON.parse(s.slice(a, b + 1)); } catch(e2) {}
+// ---------- LOCAL OCR WORKER & DETERMINISTIC FIELD PARSING ----------
+function ocrAssetUrl(path) {
+  return new URL('./vendor/ocr/' + path, document.baseURI).href;
+}
+
+async function getOcrWorker(onProgress) {
+  if (AI_OCR_WORKER) return AI_OCR_WORKER;
+  if (!window.Tesseract || typeof window.Tesseract.createWorker !== 'function') {
+    throw new Error('The local OCR engine did not load. Reload this page and try again.');
   }
-  throw new Error('Model did not return valid JSON. Raw start: ' + s.slice(0, 240));
-}
-
-function groqErrorFriendly(err) {
-  var m = String((err && err.message) || err || '');
-  if (/decommission|no longer supported|model_not_found|no such model|not found/i.test(m))
-    return m + '\n\nAll built-in vision models failed. Check the model id in the API key panel.';
-  if (/rate.?limit|429|too many requests|quota/i.test(m))
-    return m + '\n\nRate limited by Groq - wait ~10 seconds and extract again.';
-  if (/401|403|invalid.*key|unauthor|permission/i.test(m))
-    return m + '\n\nCheck the API key saved under the API Key button.';
-  if (/20 ?MB|too large|payload|413/i.test(m))
-    return m + '\n\nImage too large for the API - try a single page at a time.';
-  if (/failed to fetch|networkerror|load failed/i.test(m))
-    return m + '\n\nNetwork error - check your connection and try again.';
-  return m;
-}
-
-async function callGroqVision(apiKey, promptText, imagesB64, preferredModel) {
-  var models = preferredModel ? [preferredModel].concat(GROQ_MODELS.filter(function(m){ return m !== preferredModel; })) : GROQ_MODELS;
-  var lastErr = null;
-
-  for (var i = 0; i < models.length; i++) {
-    var content = [{ type: 'text', text: promptText }];
-    imagesB64.forEach(function(b64){
-      content.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } });
-    });
-
-    var response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: models[i],
-        messages: [{ role: 'user', content: content }],
-        temperature: 0.1,
-        max_completion_tokens: 4096,
-        response_format: { type: 'json_object' }
-      })
-    });
-
-    if (!response.ok) {
-      var msg = 'HTTP ' + response.status;
-      try {
-        var j = await response.json();
-        msg = (j.error && j.error.message) || msg;
-      } catch(e) {}
-      lastErr = new Error(msg);
-      // 400/404 usually means "this model id is wrong" - fall through to the next one.
-      if (response.status === 400 || response.status === 404) continue;
-      throw lastErr;
+  var base = ocrAssetUrl('');
+  var worker = await window.Tesseract.createWorker(OCR_LANG, 1, {
+    workerPath: base + 'worker.min.js',
+    corePath: base + 'tesseract-core-lstm.wasm.js',
+    langPath: ocrAssetUrl('lang'),
+    cacheMethod: 'write',
+    gzip: true,
+    logger: function(message){
+      if (!onProgress || !message || !message.status) return;
+      var progress = Number(message.progress);
+      onProgress('Local OCR engine: ' + message.status + (isFinite(progress) ? ' ' + Math.round(progress * 100) + '%' : ''));
     }
-
-    var data = await response.json();
-    var choice = data.choices && data.choices[0];
-    if (!choice) throw new Error('Model returned an empty completion.');
-    var parsed = parseLooseJson(choice.message && choice.message.content);
-    return { parsed: parsed, model: models[i], raw: choice.message.content };
+  });
+  try {
+    await worker.setParameters({
+      preserve_interword_spaces: '1',
+      user_defined_dpi: '300',
+      tessedit_pageseg_mode: '3'
+    });
+    AI_OCR_WORKER = worker;
+    return worker;
+  } catch (error) {
+    try { await worker.terminate(); } catch (terminateError) {}
+    throw error;
   }
-  throw lastErr || new Error('No usable vision model on this API key.');
 }
 
-function chunk(arr, size) {
-  var out = [];
-  for (var i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out.length ? out : [[]];
+function normaliseOcrLines(text) {
+  return String(text || '').replace(/\r/g, '\n').split('\n').map(function(line){
+    return line.replace(/\s+/g, ' ').trim();
+  }).filter(Boolean);
 }
 
-// Merge later batches into earlier ones without losing anything already found.
+function cleanOcrNumber(value) {
+  return String(value || '').replace(/[Oo]/g, '0').replace(/[Il|]/g, '1').replace(/\s+/g, '').toLowerCase();
+}
+
+function ocrNumberTokens(text) {
+  var tokens = [];
+  var re = /(?:^|[^A-Za-z0-9])([0-9OoIl|]{1,5}(?:\s*[pP])?)(?=$|[^A-Za-z0-9])/g;
+  var match;
+  while ((match = re.exec(String(text || ''))) !== null) tokens.push(cleanOcrNumber(match[1]));
+  return tokens;
+}
+
+function firstOcrValue(text) {
+  var m = String(text || '').match(/(?:^|[^A-Za-z0-9])([0-9OoIl|]{1,5}(?:\s*[\/,]\s*[0-9OoIl|]{1,5})*(?:\s*[pP])?)(?=$|[^A-Za-z0-9])/);
+  return m ? cleanOcrNumber(m[1]) : '';
+}
+
+function firstOcrNumber(text) {
+  var value = firstOcrValue(text);
+  return value ? value.split(/[\/,]/)[0].replace(/p$/i, '') : '';
+}
+
+function valueAfterOcrLabel(lines, labelPattern) {
+  for (var i = 0; i < lines.length; i++) {
+    var match = lines[i].match(labelPattern);
+    if (!match) continue;
+    var tail = lines[i].slice(match.index + match[0].length);
+    var value = firstOcrValue(tail);
+    if (value) return value;
+    // Some tables print the field label on one line and its value immediately below.
+    if (i + 1 < lines.length && /^\s*[:=\-–|]*\s*[0-9OoIl|]/.test(lines[i + 1])) {
+      value = firstOcrValue(lines[i + 1]);
+      if (value) return value;
+    }
+  }
+  return '';
+}
+
+function numberAfterOcrLabel(lines, labelPattern) {
+  var value = valueAfterOcrLabel(lines, labelPattern);
+  return value ? value.split(/[\/,]/)[0] : '';
+}
+
+function textAfterOcrLabel(lines, labelPattern) {
+  for (var i = 0; i < lines.length; i++) {
+    var match = lines[i].match(labelPattern);
+    if (!match) continue;
+    var tail = lines[i].slice(match.index + match[0].length).replace(/^[\s:=\-–|]+/, '').trim();
+    if (tail) return tail;
+  }
+  return '';
+}
+
+function valuesAfterOcrMarker(lines, markerPattern, count) {
+  for (var i = 0; i < lines.length; i++) {
+    var match = lines[i].match(markerPattern);
+    if (!match) continue;
+    var tail = lines[i].slice(match.index + match[0].length);
+    var tokens = ocrNumberTokens(tail);
+    // Values are sometimes laid out on the line directly below the column labels.
+    for (var j = i + 1; tokens.length < count && j < Math.min(lines.length, i + 3); j++) {
+      if (isOcrSectionHeading(lines[j])) break;
+      if (!/^\s*[:=\-–|]*\s*[0-9OoIl|]/.test(lines[j])) break;
+      tokens = tokens.concat(ocrNumberTokens(lines[j]));
+    }
+    if (tokens.length >= count) return tokens.slice(0, count).map(cleanOcrNumber);
+  }
+  return [];
+}
+
+function isOcrSectionHeading(line) {
+  return /^\s*[•*#\-–|]*\s*(?:ARS\s*[- ]?\s*[23]\b|BATH(?:\s+HANDLING)?\b|WAREHOUSE\b|BREAKDOWNS?\b|SBH\b|RMT\b)/i.test(line);
+}
+
+function ocrSection(lines, pattern) {
+  var start = -1;
+  for (var i = 0; i < lines.length; i++) {
+    if (pattern.test(lines[i])) { start = i; break; }
+  }
+  if (start === -1) return [];
+  var end = lines.length;
+  for (var j = start + 1; j < lines.length; j++) {
+    if (isOcrSectionHeading(lines[j]) && !pattern.test(lines[j])) { end = j; break; }
+  }
+  return lines.slice(start, end);
+}
+
+function ocrSequenceOrNamed(lines, markerPattern, labels, count) {
+  var values = valuesAfterOcrMarker(lines, markerPattern, count);
+  if (values.length === count) return values.join('/');
+  values = labels.map(function(label){
+    return numberAfterOcrLabel(lines, new RegExp('\\b' + label + '\\b', 'i'));
+  });
+  return values.every(Boolean) ? values.join('/') : '';
+}
+
+function extractProductionOcr(text) {
+  var lines = normaliseOcrLines(text);
+  var ars2Lines = ocrSection(lines, /^\s*[•*#\-–|]*\s*ARS\s*[- ]?\s*2\b/i);
+  var ars3Lines = ocrSection(lines, /^\s*[•*#\-–|]*\s*ARS\s*[- ]?\s*3\b/i);
+  var bathLines = ocrSection(lines, /^\s*[•*#\-–|]*\s*BATH(?:\s+HANDLING)?\b/i);
+  var warehouseLines = ocrSection(lines, /^\s*[•*#\-–|]*\s*WAREHOUSE\b/i);
+  if (!ars2Lines.length) ars2Lines = lines;
+  if (!bathLines.length) bathLines = lines;
+  if (!warehouseLines.length) warehouseLines = lines;
+
+  var result = {};
+  var date = '';
+  var shift = '';
+  for (var i = 0; i < lines.length; i++) {
+    var dateMatch = lines[i].match(/\b(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})\b/);
+    if (!date && dateMatch && typeof normSheetDate === 'function') date = normSheetDate(dateMatch[0]) || '';
+    if (!shift && /\bshift\b/i.test(lines[i]) && typeof normSheetShift === 'function') shift = normSheetShift(lines[i]) || '';
+  }
+  if (date || shift) result.sheet = { date: date, shift: shift };
+
+  var ars2 = {};
+  var lul = valueAfterOcrLabel(ars2Lines, /\bLUL\b/i);
+  var ab = numberAfterOcrLabel(ars2Lines, /\bAB\b/i);
+  var bp = numberAfterOcrLabel(ars2Lines, /\bBP\b/i);
+  var rr = ocrSequenceOrNamed(ars2Lines,
+    /\bRR\b[\s/|,]+\bRH\b[\s/|,]+\bSS\b[\s/|,]+\bRS\b/i,
+    ['RR', 'RH', 'SS', 'RS'], 4);
+  var cm1 = numberAfterOcrLabel(ars2Lines, /\bCM\s*1\b/i);
+  var cm2 = numberAfterOcrLabel(ars2Lines, /\bCM\s*2\b/i);
+  var ra = cm1 && cm2 ? cm1 + ',' + cm2 : valueAfterOcrLabel(ars2Lines, /\b(?:RODDED\s+ANODES?|ANODES\s+RODDED|RA\s*[:=\-])/i);
+  if (lul) ars2.lul = lul;
+  if (ab) ars2.ab = ab;
+  if (bp) ars2.bp = bp;
+  if (rr) ars2.rr = rr;
+  if (ra) ars2.ra = ra;
+  if (Object.keys(ars2).length) result.ars2 = ars2;
+
+  if (!ars3Lines.length) ars3Lines = lines.filter(function(line){ return /\bARS\s*[- ]?\s*3\b/i.test(line); });
+  var ars3 = {};
+  var ars3ra = numberAfterOcrLabel(ars3Lines, /\bRA\b/i);
+  var ars3sa = numberAfterOcrLabel(ars3Lines, /\bSA\b/i);
+  var ars3ba = numberAfterOcrLabel(ars3Lines, /\bBA\b/i);
+  if (ars3ra) ars3.ars3ra = ars3ra;
+  if (ars3sa) ars3.ars3sa = ars3sa;
+  if (ars3ba) ars3.ars3ba = ars3ba;
+  if (Object.keys(ars3).length) result.ars3 = ars3;
+
+  var bath = {};
+  var bathprod = numberAfterOcrLabel(bathLines, /(?:^|[^A-Za-z])P\s*[-:=]\s*/i);
+  var tanker = numberAfterOcrLabel(bathLines, /(?:^|[^A-Za-z])T\s*[-:=]\s*/i);
+  var bathstock = ocrSequenceOrNamed(bathLines,
+    /\b(?:RBS?1|R1)\b[\s/|,]+\b(?:RBS?2|R2)\b[\s/|,]+\bF1\b[\s/|,]+\bF2\b[\s/|,]+\bF3\b[\s/|,]+\bF4\b/i,
+    ['(?:RBS?1|R1)', '(?:RBS?2|R2)', 'F1', 'F2', 'F3', 'F4'], 6);
+  if (bathprod) bath.bathprod = bathprod;
+  if (tanker) bath.tanker = tanker;
+  if (bathstock) bath.bathstock = bathstock;
+  if (Object.keys(bath).length) result.bath = bath;
+
+  var warehouse = {};
+  var whstock = ocrSequenceOrNamed(warehouseLines,
+    /\bRAP\b[\s/|,]+\bSAP\b[\s/|,]+\bEBB\b[\s/|,]+\bEAP\b/i,
+    ['RAP', 'SAP', 'EBB', 'EAP'], 4);
+  var whsent = ocrSequenceOrNamed(warehouseLines,
+    /\bRA\b[\s/|,]+\bEB\b/i, ['RA', 'EB'], 2);
+  var whrcv = ocrSequenceOrNamed(warehouseLines,
+    /\bSA\b[\s/|,]+\bSB\b/i, ['SA', 'SB'], 2);
+  if (whstock) warehouse.whstock = whstock;
+  if (whsent) warehouse.whsent = whsent;
+  if (whrcv) warehouse.whrcv = whrcv;
+  if (Object.keys(warehouse).length) result.warehouse = warehouse;
+
+  var sbh = textAfterOcrLabel(lines, /\bSBH\b(?:\s*(?:&|AND)?\s*MILL)?\s*[:=\-]?/i);
+  var rmt = textAfterOcrLabel(lines, /\bRMT\b\s*[:=\-]?/i);
+  if (sbh) result.sbh_mill = sbh;
+  if (rmt) result.rmt = rmt;
+  return result;
+}
+
+function isBreakdownOcrLine(line) {
+  if (!line || /^(?:equipment|description|malf(?:unction)?|notification|change notifications|start time|end time|page\s+\d+)\b/i.test(line)) return false;
+  if (/^\d{1,4}$/.test(line)) return false;
+  return !!matchTimePair(line) || /\b(?:trip|fault|jam|overload|unable|not running|stopp?ed|failure|malfunction|alarm|repair|leak|choke|broken|damaged)\b/i.test(line) ||
+    /\b(?:loop|bc|cv|dc|ars|lul|monorail|mpnorail|furnace|crane|conveyor|belt|pump|motor|fan|dryer)\s*[-#.]?\s*[a-z0-9.]+/i.test(line);
+}
+
+function splitOcrEquipmentIssue(description) {
+  var match = String(description || '').match(/^((?:(?:loop|bc|cv|dc|lul|ars|furnace|monorail|mpnorail|crane|conveyor|air\s*dryer)\s*[-#.]?\s*[a-z]?\d+(?:\.\d+)?))\s*[,;| ]+\s*(.+)$/i);
+  return match ? { equipment: match[1].trim(), issue: match[2].trim() } : { equipment: description, issue: '' };
+}
+
+function extractBreakdownOcr(text) {
+  var lines = normaliseOcrLines(text).filter(isBreakdownOcrLine);
+  var events = [];
+  lines.forEach(function(line){
+    var match = matchTimePair(line);
+    if (!match) {
+      var untimed = splitOcrEquipmentIssue(line);
+      events.push({ equipment: untimed.equipment, issue: untimed.issue, start: '', end: '', remarks: '' });
+      return;
+    }
+    var description = (line.slice(0, match.index) + ' ' + line.slice(match.index + match[0].length)).replace(/\s+/g, ' ').trim();
+    var trailingNote = description.match(/\([^)]*\)\s*$/);
+    var remarks = trailingNote ? trailingNote[0].trim() : '';
+    if (trailingNote) description = description.slice(0, trailingNote.index).trim();
+    var parsed = splitOcrEquipmentIssue(description || line);
+    var start = normTime(match[1]);
+    var end = normTime(match[2]);
+    if (end === '00:00') end = '';
+    events.push({ equipment: parsed.equipment || description || line, issue: parsed.issue, start: start, end: end, remarks: remarks });
+  });
+  return { events: events, lines: lines };
+}
+
+async function runExtraction(kind, label, items, onProgress) {
+  var worker = await getOcrWorker(onProgress);
+  var merged = {};
+  var rawAll = [];
+  var confidences = [];
+  var pageErrors = [];
+
+  for (var i = 0; i < items.length; i++) {
+    onProgress(label + ': preparing page ' + (i + 1) + ' of ' + items.length + '…');
+    var canvas;
+    try { canvas = await getOcrCanvas(items[i].file); }
+    catch (pageError) {
+      var pageMessage = String((pageError && pageError.message) || pageError || 'Image could not be read.');
+      pageErrors.push(items[i].name + ': ' + pageMessage);
+      rawAll.push('--- Page ' + (i + 1) + '/' + items.length + ': ' + items[i].name + ' (OCR failed) ---\n' + pageMessage);
+      onProgress(label + ': page ' + (i + 1) + ' could not be prepared; continuing with the next page…');
+      continue;
+    }
+    onProgress(label + ': reading page ' + (i + 1) + ' of ' + items.length + ' locally…');
+    var result = await worker.recognize(canvas, {}, { text: true, tsv: true });
+    var text = result && result.data ? String(result.data.text || '') : '';
+    var confidence = result && result.data ? Number(result.data.confidence) : NaN;
+    if (isFinite(confidence)) confidences.push(confidence);
+    rawAll.push('--- Page ' + (i + 1) + '/' + items.length + ': ' + items[i].name +
+      (isFinite(confidence) ? ' (OCR confidence ' + Math.round(confidence) + '%)' : '') + ' ---\n' + text);
+    var parsed = kind === 'prod' ? extractProductionOcr(text) : extractBreakdownOcr(text);
+    merged = mergeExtraction(merged, parsed);
+  }
+
+  var averageConfidence = confidences.length ? Math.round(confidences.reduce(function(a,b){ return a + b; }, 0) / confidences.length) : null;
+  var note = 'Local English OCR only (no generative AI). Verify every value against the source image, especially handwritten entries.';
+  if (averageConfidence !== null) note += ' Average OCR confidence: ' + averageConfidence + '%.';
+  if (pageErrors.length) note += ' Pages not read: ' + pageErrors.join('; ') + '.';
+  merged.notes = merged.notes ? merged.notes + '\n' + note : note;
+  return { merged: merged, raw: rawAll.join('\n\n'), model: 'Tesseract.js local OCR', pages: items.length, confidence: averageConfidence };
+}
+
+function ocrErrorFriendly(err) {
+  var message = String((err && err.message) || err || '');
+  if (/local OCR engine|Tesseract|traineddata|worker|WASM|language data/i.test(message))
+    return message + '\n\nThe bundled OCR files could not be loaded. Reload the GitHub Pages site and try again; if it continues, check that the vendor/ocr files were deployed.';
+  if (/unsupported or corrupt|could not read|dimensions/i.test(message))
+    return message + '\n\nChoose a clear JPG or PNG image and try again.';
+  return message;
+}
+
+// Merge OCR results from later pages without discarding fields already read.
 function mergeNumericSection(target, src) {
   if (!src || typeof src !== 'object') return;
   Object.keys(src).forEach(function(k){
@@ -1111,111 +1292,6 @@ function mergeExtraction(base, extra) {
   return base;
 }
 
-async function runExtraction(apiKey, label, promptText, items, onProgress) {
-  var batches = chunk(items, MAX_IMAGES_PER_REQUEST);
-  var merged = {};
-  var rawAll = [];
-  var model = null;
-
-  for (var b = 0; b < batches.length; b++) {
-    onProgress(label + ': reading image batch ' + (b + 1) + ' of ' + batches.length + '…');
-    var prepared = [];
-    for (var k = 0; k < batches[b].length; k++) {
-      prepared.push(await getCompressedBase64(batches[b][k].file));
-    }
-    var res = await callGroqVision(apiKey, promptText, prepared, model);
-    model = res.model;
-    rawAll.push('--- batch ' + (b + 1) + '/' + batches.length + ' (' + model + ') ---\n' + res.raw);
-    merged = mergeExtraction(merged, res.parsed);
-  }
-
-  return { merged: merged, raw: rawAll.join('\n\n'), model: model, batches: batches.length };
-}
-
-// ---------- PROMPTS ----------
-const PROD_PROMPT = [
-  'You extract handwritten Anode Rodding Shop (ARS) production shift data from logbook pages.',
-  'Analyze the handwriting carefully across all columns. Look for short alphanumeric pairs like "LUL-528", "P- 289", "T- 16", "RAP- 530".',
-  '',
-  'FIELD EXTRACTION RULES:',
-  '1. ARS-2 Section:',
-  '   - "lul": Read the number after LUL (e.g., "LUL-528" -> 528). Format as "800/<number>" (e.g., "800/528").',
-  '   - "ab": Number written after AB (e.g., 560). Must be an integer number, or null if missing.',
-  '   - "bp": Number written after BP (e.g., 570). Must be an integer number, or null if missing.',
-  '   - "rr": Look for RR, RH, SS, RS numbers and assemble strictly in the order "RR/RH/SS/RS" (e.g., "70/74/38/33").',
-  '   - "ra": Count of Rodded Anodes / CM as an integer number, or null if not found.',
-  '',
-  '2. ARS-3 Section:',
-  '   - "ars3ra": ARS-3 RA production integer number, or null if absent.',
-  '   - "ars3sa": ARS-3 SA processed integer number (e.g., SA-704 -> 704), or null if absent.',
-  '   - "ars3ba": ARS-3 BA received sets integer number, or null if absent.',
-  '',
-  '3. Bath Handling Section (MAPPING P & T):',
-  '   - "bathprod": Extract the exact number written after "P-" or "P - " (e.g., "P- 289" -> 289). Put this into "bathprod". Must be an integer number.',
-  '   - "tanker": Extract the exact number written after "T-" or "T - " (e.g., "T- 16" -> 16). NOTE: The handwritten digit 1 may look like a lowercase t (e.g., "t6" is 16). Put this into "tanker". Must be an integer number.',
-  '   - "bathstock": Look for R1, R2, F1, F2, F3, F4 numbers and format strictly as "R1/R2/F1/F2/F3/F4" (e.g., "94/84/225/82/202/00").',
-  '',
-  '4. Warehouse Section:',
-  '   - "whstock": Assemble numbers in order "RAP/SAP/EBB/EAP" (e.g., "530/468/120/32").',
-  '   - "whsent": Assemble numbers in order "RA/EB" (e.g., "684/84").',
-  '   - "whrcv": Assemble numbers in order "SA/SB" (e.g., "616/75").',
-  '',
-  '5. Sheet & Remarks:',
-  '   - "sheet": Extract date/shift if written; otherwise use null.',
-  '   - "sbh_mill", "rmt", "notes": Short string descriptions or empty string "".',
-  '',
-  'Return ONLY valid JSON matching this exact structure:',
-  '{',
-  '  "sheet": { "date": null, "shift": null },',
-  '  "ars2": { "lul": "800/528", "ab": 560, "bp": 570, "rr": "70/74/38/33", "ra": null },',
-  '  "ars3": { "ars3ra": null, "ars3sa": 704, "ars3ba": null },',
-  '  "bath": { "bathprod": 289, "tanker": 16, "bathstock": "94/84/225/82/202/00" },',
-  '  "warehouse": { "whstock": "530/468/120/32", "whsent": "684/84", "whrcv": "616/75" },',
-  '  "sbh_mill": "",',
-  '  "rmt": "",',
-  '  "notes": ""',
-  '}',
-  'Do not wrap the JSON in markdown code blocks.'
-].join('\n');
-
-const BD_PROMPT = [
-  'You extract equipment breakdown, downtime, and malfunction notifications from SAP screen captures and handwritten breakdown logbooks.',
-  'Handle both formats seamlessly:',
-  '  1. SAP Table Screen ("Change Notifications: List of Notifications"):',
-  '     - Look at columns: "Description", "MalfStrt", and "Malf. End".',
-  '     - The "Description" contains both the equipment tag and the malfunction reason (e.g., "Mpnorail3 unable to Move", "CV 1.02 overload trip", "DC2, SC1 jam").',
-  '     - If "Malf. End" is "00:00:00", treat it as ongoing/unclosed and set "end" to "".',
-  '  2. Handwritten Logbook:',
-  '     - Contains separate columns for Equipment (e.g., "Loop-3", "Loop-6", "LUL-2", "ARS-3"), Malfunction Reason/Issue (e.g., "not running", "Torque Overload", "PD Latch unable to extend"), and Times.',
-  '     - Start and end times are written in adjacent columns or split format (e.g., "10:00" | "13:00 (M)", "7:00" | "7:40 (M)"). Any trailing note like "(M)" goes into "remarks".',
-  '',
-  'CRITICAL TIME FORMATTING RULE (12-HOUR FORMAT):',
-  '- ALL start and end times MUST be converted and formatted strictly in 12-hour format with AM/PM (e.g., "7:00 AM", "10:00 AM", "1:00 PM", "2:00 PM").',
-  '- Drop the trailing seconds (e.g., "14:00:22" becomes "2:00 PM", "07:50:00" becomes "7:50 AM", "13:00" becomes "1:00 PM").',
-  '- If an end time is "00:00:00" or blank, set "end" to "".',
-  '',
-  'PARSING & EXTRACTION RULES:',
-  '- equipment: The exact equipment identifier or tag (e.g., "Monorail 3", "CV 1.02", "DC2", "Loop-3", "LUL-2", "ARS-3"). Preserve exact equipment names.',
-  '- issue: The short description of the problem/fault (e.g., "unable to Move", "CT moter Trip", "overload trip", "Torque Overload", "CM Rod clamp cyl Rod eye damaged").',
-  '- start: The malfunction start time in 12-hour format (e.g., "7:00 AM", "10:00 AM").',
-  '- end: The malfunction end time in 12-hour format (e.g., "7:50 AM", "1:00 PM"). If unclosed/blank, set to "".',
-  '- remarks: Any trailing notations, duration tags, or notes (e.g., "(M)"). If none, set to "".',
-  '',
-  'Return ONLY valid JSON matching this exact structure:',
-  '{',
-  '  "events": [',
-  '    { "equipment": "CV 1.02", "issue": "overload trip", "start": "8:00 AM", "end": "8:50 AM", "remarks": "" },',
-  '    { "equipment": "Loop-3", "issue": "not running", "start": "10:00 AM", "end": "1:00 PM", "remarks": "(M)" }',
-  '  ],',
-  '  "lines": [',
-  '    "CV 1.02 overload trip 8:00 AM 8:50 AM",',
-  '    "Loop-3 not running 10:00 AM 1:00 PM (M)"',
-  '  ],',
-  '  "notes": ""',
-  '}',
-  'Do not invent events. Do not wrap the JSON in markdown code blocks.'
-].join('\n');
-
 // ---------- BREAKDOWN NORMALISATION (layout tolerant) ----------
 var TIME_PAIR_RE = /(\d{1,2}[:.\s]\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)\s*(?:-|–|—|to|until|till)\s*(\d{1,2}[:.\s]\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)/i;
 // Pasted table rows often separate the two times with a pipe, tab or comma
@@ -1277,7 +1353,7 @@ function formatBreakdownEvent(ev) {
   var start = normTime(ev && ev.start);
   var end = normTime(ev && ev.end);
 
-  // If the model stuffed the issue into the equipment field, split it back out.
+  // If OCR placed the issue in the equipment field, split it back out.
   if (!issue && equipment.indexOf(',') !== -1) {
     var parts = equipment.split(',');
     equipment = parts.shift().trim();
@@ -1296,8 +1372,8 @@ function formatBreakdownEvent(ev) {
   return '*' + (name || 'Event') + timeTxt + (remarks ? ' ' + remarks : '') + (flags.length ? ' ' + flags.join(' & ') : '');
 }
 
-// Build report lines from whatever the model gave us. Falls back to the
-// verbatim transcription when the structured event list is unusable.
+// Build report lines from OCR events, falling back to the verbatim
+// transcription when structured rows are unavailable.
 function normaliseBreakdowns(merged) {
   var out = [];
   var events = (merged && Array.isArray(merged.events)) ? merged.events : [];
@@ -1412,7 +1488,7 @@ function openReview(merged, rawText, notes) {
   var html = '';
 
   if (notes && notes.trim()) {
-    html += '<div class="rv-note"><b>Model flagged these as uncertain:</b>\n' + esc(notes.trim()) + '</div>';
+    html += '<div class="rv-note"><b>OCR notes:</b>\n' + esc(notes.trim()) + '</div>';
   }
 
   html += '<div class="rv-block"><div class="rv-head">Production &amp; stock figures</div><div class="rv-grid">';
@@ -1444,7 +1520,7 @@ function openReview(merged, rawText, notes) {
       '<textarea id="rv_rmt" rows="2">' + esc(merged.rmt) + '</textarea></div>';
   }
 
-  html += '<div class="rv-block hidden" id="rv-raw-block"><div class="rv-head">Raw model output</div><div class="rv-out">' + esc(rawText) + '</div></div>';
+  html += '<div class="rv-block hidden" id="rv-raw-block"><div class="rv-head">Raw OCR text</div><div class="rv-out">' + esc(rawText) + '</div></div>';
 
   el('review-panel').innerHTML = html;
   el('review-card').style.display = 'block';
@@ -1641,16 +1717,8 @@ function applyExtractedDraft() {
 
 el('review-apply-btn').addEventListener('click', function(){ applyExtractedDraft(); });
 
-// ---------- MAIN EXTRACT ----------
+// ---------- MAIN LOCAL OCR EXTRACT ----------
 el('ai-process-btn').addEventListener('click', async function(){
-  var apiKey = getGroqKey();
-
-  if (!apiKey) {
-    el('key-config-wrap').style.display = 'block';
-    alert('Add a Groq API key (starts with gsk_...) under the API Key button to run extraction in your browser.');
-    return;
-  }
-
   if (!AI_IMG.prod.length && !AI_IMG.bd.length) {
     alert('Select a production sheet image, a breakdown image, or both.');
     return;
@@ -1660,35 +1728,44 @@ el('ai-process-btn').addEventListener('click', async function(){
   btn.disabled = true;
   el('ai-loader').classList.add('active');
   el('review-card').style.display = 'none';
-  var notes = [];
   var rawParts = [];
   var merged = {};
 
   try {
     if (AI_IMG.prod.length) {
-      setStatus('Production: preparing ' + AI_IMG.prod.length + ' image(s)…');
-      var pr = await runExtraction(apiKey, 'Production', PROD_PROMPT, AI_IMG.prod, setStatus);
+      setStatus('Production: initializing local OCR for ' + AI_IMG.prod.length + ' image(s)…');
+      var pr = await runExtraction('prod', 'Production', AI_IMG.prod, setStatus);
       merged = mergeExtraction(merged, pr.merged);
       rawParts.push('===== PRODUCTION (' + pr.model + ') =====\n' + pr.raw);
-      if (pr.merged.notes) notes.push('Production: ' + pr.merged.notes);
     }
 
     if (AI_IMG.bd.length) {
-      setStatus('Breakdown: preparing ' + AI_IMG.bd.length + ' image(s)…');
-      var br = await runExtraction(apiKey, 'Breakdown', BD_PROMPT, AI_IMG.bd, setStatus);
+      setStatus('Breakdown: preparing ' + AI_IMG.bd.length + ' image(s) for local OCR…');
+      var br = await runExtraction('bd', 'Breakdown', AI_IMG.bd, setStatus);
       merged = mergeExtraction(merged, br.merged);
       rawParts.push('===== BREAKDOWN (' + br.model + ') =====\n' + br.raw);
-      if (br.merged.notes) notes.push('Breakdown: ' + br.merged.notes);
     }
 
-    var anyValue = Object.keys(merged).some(function(k){ return k !== 'notes'; });
+    var anyValue = Object.keys(merged).some(function(k){
+      if (k === 'notes') return false;
+      var value = merged[k];
+      if (value === null || value === undefined) return false;
+      if (typeof value === 'string') return value.trim() !== '';
+      if (Array.isArray(value)) return value.some(function(item){ return item !== null && item !== undefined && String(item).trim() !== ''; });
+      if (typeof value === 'object') return Object.keys(value).some(function(field){
+        var item = value[field];
+        return item !== null && item !== undefined && String(item).trim() !== '';
+      });
+      return true;
+    });
     if (!anyValue) {
-      setStatus('The model ran but found no readable data. Try a sharper or better-lit image, or add a page.', 'err');
+      openReview(merged, rawParts.join('\n\n'), merged.notes || '');
+      setStatus('OCR found no structured values. Raw OCR text is available in review; correct or enter the values manually.', 'err');
       return;
     }
-    openReview(merged, rawParts.join('\n\n'), notes.join('\n'));
+    openReview(merged, rawParts.join('\n\n'), merged.notes || '');
   } catch (error) {
-    setStatus('Extraction failed:\n' + groqErrorFriendly(error), 'err');
+    setStatus('OCR extraction failed:\n' + ocrErrorFriendly(error), 'err');
   } finally {
     btn.disabled = false;
     el('ai-loader').classList.remove('active');
